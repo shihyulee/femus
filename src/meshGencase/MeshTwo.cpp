@@ -22,12 +22,13 @@ namespace femus {
 
 
 // ========================================================
-MeshTwo::MeshTwo (const Files& files_in, const RunTimeMap<double>& map_in, const double Lref) :
+MeshTwo::MeshTwo (const Files& files_in, const FemusInputParser<double>& map_in, const std::string mesh_file_in) :
          _files(files_in),
          _mesh_rtmap(map_in),
          _dim(map_in.get("dimension")),
-         _mesh_order(map_in.get("mesh_ord")),
-         _Lref(Lref)   {
+         _mesh_order(map_in.get("mesh_ord"))  {
+
+    _mesh_file.assign(mesh_file_in); 
 
     std::vector <std::string>  geomelem; 
     geomelem.resize(_dim);
@@ -82,7 +83,7 @@ if ( _dim == 1  && (map_in.get("geomel_type") != LINE ) )
 
     _iproc    = paral::get_rank();
     _NoSubdom = paral::get_size();   
-    _NoLevels = _mesh_rtmap.get("nolevels");
+    _NoLevels = GetRuntimeMap().get("nolevels");
     
     const uint mesh_ord = (uint) map_in.get("mesh_ord");
     if (mesh_ord != 0) {
@@ -152,12 +153,12 @@ void MeshTwo::clear ()  {
 
 // ========================================================
 //This function transforms the node coordinates into the reference node coordinates
-  void MeshTwo::TransformElemNodesToRef(const uint vb,const double* xx_qnds, double* refbox_xyz) const {
+  void MeshTwo::TransformElemNodesToRef(const uint elem_dim,const double* xx_qnds, double* refbox_xyz) const {
    
    double*   x_in = new double[_dim];
    double*   x_out = new double[_dim];
-  const uint mesh_ord = (int) _mesh_rtmap.get("mesh_ord");
-  const uint el_nds = GetGeomEl(_dim-1-vb,mesh_ord)._elnds;
+  const uint mesh_ord = (int) GetRuntimeMap().get("mesh_ord");
+  const uint el_nds = GetGeomEl(elem_dim-1,mesh_ord)._elnds;
 
       for (uint n=0;n < el_nds ;n++) {
 	
@@ -196,13 +197,14 @@ void MeshTwo::clear ()  {
 //is this function for ALL PROCESSORS 
 // or only for PROC==0? Seems to be for all processors
 // TODO do we need the leading "/" for opening a dataset?
-void MeshTwo::ReadMeshFile()   {
+// This routine reads the mesh file and also makes it NONDIMENSIONAL, so that everything is solved on a nondimensional mesh
+void MeshTwo::ReadMeshFileAndNondimensionalize()   {
 
   std::string    basemesh = DEFAULT_BASEMESH;
   std::string      ext_h5 = DEFAULT_EXT_H5;
   
   std::ostringstream meshname;
-  meshname << _files._output_path << "/" << DEFAULT_CASEDIR << "/" << basemesh  << ext_h5;
+  meshname << _files._output_path << "/" << basemesh  << ext_h5;
 
 //==================================
 // OPEN FILE 
@@ -235,7 +237,7 @@ void MeshTwo::ReadMeshFile()   {
 //I'll put a check 
 
 if (_dim != topdata[0] ) {std::cout << "MeshTwo::read_c. Mismatch: the mesh dimension is " << _dim
-                                   << " while the dimension in the configuration file is " << _mesh_rtmap.get("dimension")
+                                   << " while the dimension in the configuration file is " << GetRuntimeMap().get("dimension")
                                    << ". Recompile either gencase or your application appropriately" << std::endl;abort();}
 //it seems like it doesn't print to file if I don't put the endline "<< std::endl".
 //Also, "\n" seems to have no effect, "<< std::endl" must be used
@@ -252,7 +254,7 @@ if ( VB !=  topdata[1] )  {std::cout << "MeshTwo::read_c. Mismatch: the number o
 //the point is: what if you already have a mesh in external format?
 //then you have to either read the mesh order from the external file, if such
 //information can be retrieved, or provide it explicitly
-    const uint mesh_ord = (int) _mesh_rtmap.get("mesh_ord");    
+    const uint mesh_ord = (int) GetRuntimeMap().get("mesh_ord");    
 
 //==================================
 // FEM element DoF number
@@ -400,24 +402,6 @@ for (int vb=0; vb < VB; vb++)    {
 
 
 
-
-
-// ========================================================
-/// Write mesh to hdf5 file (namefile) 
-///              as Mesh class (Mesh.h): 
-
-void MeshTwo::PrintMeshFile (const std::string & /*namefile*/) const
-{ 
-
-  std::cout << "Implement it following the Gencase print mesh function" << std::endl; abort();
-  
-  return; 
-}
-
-
-
-
-
 //=============================================
 //this is different from the Mesh class function
 //because we are using quadratic elements
@@ -476,15 +460,15 @@ void MeshTwo::PrintForVisualizationAllLEVAllVB()  const {
 // ==================================================================
 void MeshTwo::PrintMultimeshXdmf() const {
 
-    std::string basepath  = _files._app_path;
-    std::string input_dir = DEFAULT_CASEDIR;
+     if (_iproc==0) {
+  
     std::string multimesh = DEFAULT_MULTIMESH;
     std::string ext_xdmf  = DEFAULT_EXT_XDMF;
     std::string basemesh  = DEFAULT_BASEMESH;
     std::string ext_h5    = DEFAULT_EXT_H5;
 
     std::ostringstream inmesh_xmf;
-    inmesh_xmf << basepath << "/" << input_dir << multimesh << ext_xdmf;
+    inmesh_xmf << _files._output_path << "/" << multimesh << ext_xdmf;
     std::ofstream out(inmesh_xmf.str().c_str());
 
     std::ostringstream top_file;
@@ -538,6 +522,8 @@ void MeshTwo::PrintMultimeshXdmf() const {
     out << "</Xdmf> \n";
     out.close();
 
+    }    //end iproc
+    
     return;
 }
 
