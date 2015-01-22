@@ -2,13 +2,13 @@
 
 #include "SystemTwo.hpp"
 #include "Quantity.hpp"
-#include "MeshTwo.hpp"
+#include "MultiLevelMeshTwo.hpp"
 
 
 namespace femus {
   
   
- DofMap::DofMap(const SystemTwo& eqn_in, const MeshTwo& mesh_in) : _eqn(eqn_in),_mesh(mesh_in) { }
+ DofMap::DofMap(const SystemTwo& eqn_in, const MultiLevelMeshTwo& mesh_in) : _eqn(eqn_in),_mesh(mesh_in) { }
 
   
 
@@ -292,7 +292,7 @@ void DofMap::ComputeMeshToDof() {
   
   
     assert(  _n_vars > 0);
-    assert(_NoLevels > 0);
+    assert(_mesh._NoLevels > 0);
 
     _Dim      = new uint [ _mesh._NoLevels];
 
