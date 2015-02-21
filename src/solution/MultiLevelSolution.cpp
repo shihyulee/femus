@@ -154,8 +154,7 @@ void MultiLevelSolution::Initialize(const char name[], initfunc func) {
   if (!strcmp(name,"All") || !strcmp(name,"all") || !strcmp(name,"ALL")) {
     i_start=0;
     i_end=_SolType.size();
-  } 
-  else {
+  } else {
     i_start=GetIndex(name);
     i_end=i_start+1u;
   }
@@ -163,6 +162,7 @@ void MultiLevelSolution::Initialize(const char name[], initfunc func) {
   for (unsigned i=i_start; i<i_end; i++) {
     unsigned sol_type = _SolType[i];
     for (unsigned ig=0; ig<_gridn; ig++) {
+      unsigned num_el = _ml_msh->GetLevel(ig)->GetNumberOfElements();
       _solution[ig]->ResizeSolutionVector(_SolName[i]);
       if ( ig > 0 ) BuildProlongatorMatrix(ig,i);
       _solution[ig]->_Sol[i]->zero();

@@ -90,12 +90,14 @@ int main(int argc,char **args) {
   MultiLevelSolution ml_sol(&ml_msh);
   
   // generate solution vector
- 
+  
   FEOrder orderPre = FIRST;
   FEOrder orderVel = FIRST;
   FEOrder orderTemp = FIRST;
   
-  ml_sol.AddSolution("lmbd",DISCONTINOUS_POLYNOMIAL,ZERO,0,false);
+  ml_sol.AddSolution("U", LAGRANGE, orderVel);
+  ml_sol.AddSolution("V", LAGRANGE, orderVel);
+  ml_sol.AddSolution("lmbd", DISCONTINOUS_POLYNOMIAL, ZERO, 0, false);
   
   // the pressure variable should be the last for the Schur decomposition
   // ml_sol.AddSolution("P",DISCONTINOUS_POLYNOMIAL,FIRST);
@@ -105,8 +107,11 @@ int main(int argc,char **args) {
   ml_sol.AddSolution("T",LAGRANGE,orderTemp);
   
   //Initialize (update Init(...) function)
-  ml_sol.Initialize("All");
-  
+  ml_sol.Initialize("U");
+  ml_sol.Initialize("V");
+  ml_sol.Initialize("P");
+  ml_sol.Initialize("T");
+  ml_sol.Initialize("lmbd");
   //Set Boundary (update Dirichlet(...) function)
   ml_sol.AttachSetBoundaryConditionFunction(SetBoundaryConditionCavityFlow);
   ml_sol.GenerateBdc("U");
