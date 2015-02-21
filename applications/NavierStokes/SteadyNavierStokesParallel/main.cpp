@@ -91,6 +91,10 @@ int main(int argc,char **args) {
   
   // generate solution vector
  
+  FEOrder orderPre = FIRST;
+  FEOrder orderVel = FIRST;
+  FEOrder orderTemp = FIRST;
+  
   ml_sol.AddSolution("lmbd",DISCONTINOUS_POLYNOMIAL,ZERO,0,false);
   
   // the pressure variable should be the last for the Schur decomposition

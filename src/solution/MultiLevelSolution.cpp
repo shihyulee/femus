@@ -147,7 +147,7 @@ void MultiLevelSolution::AssociatePropertyToSolution(const char solution_name[],
 }
 
 // *******************************************************
-void MultiLevelSolution::Initialize(const char name[], initfunc initFuncion) {
+void MultiLevelSolution::Initialize(const char name[], initfunc func) {
   
   unsigned i_start;
   unsigned i_end;
@@ -161,7 +161,7 @@ void MultiLevelSolution::Initialize(const char name[], initfunc initFuncion) {
   }
   
   for (unsigned i=i_start; i<i_end; i++) {
-    unsigned solType = _SolType[i];
+    unsigned sol_type = _SolType[i];
     for (unsigned ig=0; ig<_gridn; ig++) {
       _solution[ig]->ResizeSolutionVector(_SolName[i]);
       if ( ig > 0 ) BuildProlongatorMatrix(ig,i);
