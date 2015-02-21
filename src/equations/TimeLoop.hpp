@@ -1,3 +1,18 @@
+/*=========================================================================
+
+ Program: FEMUS
+ Module: TimeLoop
+ Authors: Giorgio Bornia
+
+ Copyright (c) FEMTTU
+ All rights reserved.
+
+ This software is distributed WITHOUT ANY WARRANTY; without even
+ the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ PURPOSE.  See the above copyright notice for more information.
+
+=========================================================================*/
+
 #ifndef __mgtimeloop_h__
 #define __mgtimeloop_h__
 
@@ -31,15 +46,10 @@ public:
     uint     _curr_t_idx; 
     double   _curr_time;
 
-  TimeLoop(Files& files_in);
+  TimeLoop(Files& files_in, const FemusInputParser<double> & map_in);
 
   ~TimeLoop(){};
    
-// print -------------------------------------------
-   //this function is ok here because it doesn't involve the map 
-   //of the EQUATIONS, it is just a print of a time sequence to a .xmf file
-   void transient_print_xmf ( const uint t_idx_in,const uint t_idx_final, const uint nolevels) const;
-
  // i did it "static" so that it can be used regardless of the specific instantiation;
  // since it is static it cannot act on the class runtime map which is not static datum;
  // so i have to pass the "unconstrained" runtime map explicitly  
@@ -48,10 +58,10 @@ public:
   /////< MG time step solver (backward Euler)
   double MGTimeStep(const uint iter, SystemTwo * eqn) const;   
   
-  void OneTimestepEqnLoop(const uint delta_t_step_in, const MultiLevelProblemTwo & eqnmap) const;
+  void OneTimestepEqnLoop(const uint delta_t_step_in, const MultiLevelProblem & eqnmap) const;
 
-  void TransientLoop(const MultiLevelProblemTwo & eqnmap);   //a standard transient loop in alphabetical order
-  void TransientSetup(const MultiLevelProblemTwo & eqnmap);  //initialization of all the equations in the map
+  void TransientLoop(const MultiLevelProblem & eqnmap);   //a standard transient loop in alphabetical order
+  void TransientSetup(const MultiLevelProblem & eqnmap);  //initialization of all the equations in the map
 
 };
 

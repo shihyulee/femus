@@ -14,8 +14,7 @@
 
 #include "VBTypeEnum.hpp"
 #include "Files.hpp"
-#include "IO.hpp"
-#include "GeomEl.hpp"
+#include "XDMFWriter.hpp"
 #include "FEElemBase.hpp"
 
 // LibMesh
@@ -35,12 +34,12 @@ using namespace libMesh;
 namespace femus {
 
 // ========================================================
-GenCase::GenCase(const Files& files_in,const FemusInputParser<double> & map_in, const std::string mesh_file_in)
-     : MultiLevelMeshTwo(files_in,map_in,mesh_file_in)
+GenCase::GenCase(const FemusInputParser<double> & map_in, const std::string mesh_file_in)
+     : MultiLevelMeshTwo(map_in,mesh_file_in)
 {
 
    _feelems.resize(QL);
-  for (int fe=0; fe<QL; fe++) _feelems[fe] = FEElemBase::build(GetGeomEl(get_dim()-1-VV,_mesh_order)._geomel_id.c_str(),fe);
+  for (int fe=0; fe<QL; fe++) _feelems[fe] = FEElemBase::build(_geomelem_id[get_dim()-1].c_str(),fe);
  
 }
 
@@ -65,7 +64,7 @@ GenCase::~GenCase() {
 
 
 // =======================================================
-void GenCase::GenerateCase()   {
+void GenCase::GenerateCase(const std::string output_path)   {
 #ifdef HAVE_LIBMESH //i am putting this inside because there are no libmesh dependent arguments
   
   
@@ -95,9 +94,9 @@ void GenCase::GenerateCase()   {
     delete _msh_all_levs;
     delete _msh_coarse;
 
-    CreateMeshStructuresLevSubd();    //only proc==0
+    CreateMeshStructuresLevSubd(output_path);    //only proc==0
     
-    ComputeMGOperators();    //only proc==0
+    ComputeAndPrintMGOperators(output_path);    //only proc==0
 
     Delete();
 
@@ -157,14 +156,14 @@ void GenCase::GenerateCoarseMesh() const {
             libMesh::ElemType libmname; //convert the _geomel name into the libmesh geom el name
 
             if ( get_dim() == 2 ) {
-            if (     GetGeomEl(get_dim()-1,_mesh_order).name == "Quadrilateral_9") libmname = libMesh::QUAD9;
-            else if (GetGeomEl(get_dim()-1,_mesh_order).name == "Triangle_6")  libmname = libMesh::TRI6;
+            if (      _geomelem_id[get_dim()-1] == "quad") libmname = libMesh::QUAD9;
+            else if ( _geomelem_id[get_dim()-1] == "tri")  libmname = libMesh::TRI6;
             libMesh::MeshTools::Generation::build_square
             (*_msh_coarse, ninterv[0], ninterv[1], box->_lb[0], box->_le[0], box->_lb[1], box->_le[1],libmname);
 	    }
 	    else if ( get_dim() == 3 ) {
-            if (     GetGeomEl(get_dim()-1,_mesh_order).name == "Hexahedron_27")  libmname = libMesh::HEX27;
-            else if (GetGeomEl(get_dim()-1,_mesh_order).name == "Tetrahedron_10")  libmname = libMesh::TET10;
+            if (      _geomelem_id[get_dim()-1] == "hex")  libmname = libMesh::HEX27;
+            else if ( _geomelem_id[get_dim()-1] == "tet")  libmname = libMesh::TET10;
             libMesh::MeshTools::Generation::build_cube
             (*_msh_coarse,  ninterv[0], ninterv[1],  ninterv[2], box->_lb[0], box->_le[0], box->_lb[1], box->_le[1], box->_lb[2], box->_le[2],libmname);
 	    }
@@ -575,7 +574,7 @@ void  GenCase::GrabMeshinfoFromLibmesh() {
 //==============================================================================
 //=============== CREATE FEMUS MESH, MAT, PROL, REST (only proc0) ==============
 //==============================================================================
-void GenCase::CreateMeshStructuresLevSubd() {
+void GenCase::CreateMeshStructuresLevSubd(const std::string output_path) {
 
     if (_iproc == 0)   {  //serial function
 //================================================
@@ -610,7 +609,7 @@ void GenCase::CreateMeshStructuresLevSubd() {
 
         ComputeNodeMapExtLevels();
 
-        PrintMeshFile();
+        XDMFWriter::PrintMeshBiquadraticHDF5(output_path,*this);
 
 // delete the boundary part, no more needed
         for (int i=0;i<_n_elements_sum_levs[BB];i++)      delete  _el_sto_b[i];
@@ -626,15 +625,15 @@ void GenCase::CreateMeshStructuresLevSubd() {
 
 
 
-void GenCase::ComputeMGOperators() {
+void GenCase::ComputeAndPrintMGOperators(const std::string output_path) {
 
     if (_iproc == 0)   {  //serial function
       
             //this involves only VOLUME STUFF, no boundary stuff
             // instead, not only NODES but also ELEMENTS are used
-        ComputeMatrix(); 
-        ComputeProl(); 
-        ComputeRest();
+        ComputeAndPrintMatrix(output_path); 
+        ComputeAndPrintProl(output_path); 
+        ComputeAndPrintRest(output_path);
 
     } //end proc==0
 
@@ -692,172 +691,9 @@ void GenCase::Delete() {
 
 
 
-// =======================================================================
-// For every matrix, compute "dimension", "position", "len", "offlen"
-// this function concerns a COUPLE of finite element families, that's it
-// fe_row = rows
-// fe_col = columns
-// the arrays that I print with HDF5 should already be filled at this point and have their dimension explicit
-// the dimension of POS (Mat)        is "count"
-// the dimension of LEN (len)        is "n_dofs_lev_fe[fe_row]+1"
-// the dimension of OFFLEN (len_off) is "n_dofs_lev_fe[fe_row]+1"
-
-void GenCase::PrintOneVarMatrixHDF5(const std::string & name, const std::string & groupname, uint** n_dofs_lev_fe,int count,
-                               int* Mat,int* len,int* len_off,
-                               int fe_row, int fe_col, int* FELevel) const {
-
-
-    hid_t file = H5Fopen(name.c_str(),H5F_ACC_RDWR, H5P_DEFAULT);
-
-    hsize_t dimsf[2];
-    dimsf[1] = 1;  //for all the cases
-
-    std::ostringstream fe_couple;
-    fe_couple <<  "_F" << fe_row << "_F" << fe_col;
-
-    //==== DIM ========
-    std::ostringstream name0;
-    name0  << groupname << "/" << "DIM" << fe_couple.str();
-    dimsf[0]=2;
-    int rowcln[2];
-    rowcln[0]=n_dofs_lev_fe[fe_row][FELevel[fe_row]]; //row dimension
-    rowcln[1]=n_dofs_lev_fe[fe_col][FELevel[fe_col]]; //column dimension
-    IO::print_Ihdf5(file,name0.str().c_str(),dimsf,rowcln);
-
-    //===== POS =======
-    std::ostringstream name1;
-    name1 << groupname << "/"  << "POS" << fe_couple.str();
-    dimsf[0]=count;
-    IO::print_Ihdf5(file,name1.str().c_str(),dimsf,Mat);
-
-    //===== LEN =======
-    std::ostringstream name2;
-    name2 << groupname << "/"  << "LEN" << fe_couple.str();
-    dimsf[0]=rowcln[0]+1;
-    IO::print_Ihdf5(file,name2.str().c_str(),dimsf,len);
-
-    //==== OFFLEN ========
-    std::ostringstream name3;
-    name3 << groupname << "/"  << "OFFLEN" << fe_couple.str();
-    dimsf[0]= rowcln[0]+1;
-    IO::print_Ihdf5(file,name3.str().c_str(),dimsf,len_off);
-
-    H5Fclose(file);  //TODO this file seems to be closed TWICE, here and in the calling function
-    //you open and close the file for every (FE_ROW,FE_COL) couple
-
-    return;
-}
 
 
 
-// ===============================================================
-// here pay attention, the EXTENDED LEVELS are not used for distinguishing
-//
-void GenCase::PrintOneVarMGOperatorHDF5(const std::string & filename,const std::string & groupname, uint* n_dofs_lev, int count, int* Op_pos,double* Op_val,int* len,int* len_off, int FELevel_row, int FELevel_col, int fe) const {
-
-    hid_t file = H5Fopen(filename.c_str(),H5F_ACC_RDWR, H5P_DEFAULT);  //TODO questo apri interno e' per assicurarsi che il file sia aperto... quello fuori credo che non serva...
-                                                                       // e invece credo che quello serva per CREARE il file, altrimenti non esiste
-
-    hsize_t dimsf[2];
-    dimsf[1] = 1;  //for all the cases
-
-    std::ostringstream fe_family;
-    fe_family <<  "_F" << fe;
-    //==== DIM ========
-    std::ostringstream name0;
-    name0 << groupname << "/" << "DIM" << fe_family.str();
-    dimsf[0] = 2;
-    int rowcln[2]; //for restrictor row is coarse, column is fine
-        rowcln[0] = n_dofs_lev[FELevel_row];
-        rowcln[1] = n_dofs_lev[FELevel_col];
-	
-    IO::print_Ihdf5(file,name0.str().c_str(),dimsf,rowcln);
-    //===== POS =======
-    std::ostringstream name1;
-    name1 << groupname << "/" << "POS" << fe_family.str();
-    dimsf[0] = count;
-    IO::print_Ihdf5(file,name1.str().c_str(),dimsf,Op_pos);
-    //===== VAL =======
-    std::ostringstream name1b;
-    name1b << groupname << "/" << "VAL" << fe_family.str();
-    dimsf[0] = count;
-    IO::print_Dhdf5(file,name1b.str().c_str(),dimsf,Op_val);
-    //===== LEN =======
-    std::ostringstream name2;
-    name2 << groupname << "/" << "LEN" << fe_family.str();
-    dimsf[0] = rowcln[0] + 1;
-    IO::print_Ihdf5(file,name2.str().c_str(),dimsf,len);
-    //==== OFFLEN ========
-    std::ostringstream name3;
-    name3 << groupname << "/" << "OFFLEN" << fe_family.str();
-    dimsf[0] = rowcln[0] + 1;
-    IO::print_Ihdf5(file,name3.str().c_str(),dimsf,len_off);
-
-
-    //TODO Attenzione!!! Per scrivere una matrice HDF5 la vuole TUTTA INSIEME!!!
-    //QUINDI DEVI FARE IN MODO DA ALLOCARLA SU UNO SPAZIO DI MEMORIA CONTIGUO!!!
-    // per questo devi fare l'allocazione non con i new separati per ogni riga,
-    //perche' in tal modo ogni riga puo' essere allocata in uno spazio di memoria
-    //differente, rompendo la contiguita'!
-    
-    //TODO I must do two template functions out of these
-    
-    //ok let me print also in matrix form, more easily readable
-    //i have a one dimensional array, i want to break it into two dimensional arrays
-    //ok if I just create it it puts only zeros
-    //now i want to extract vectors and in each row put the vector i want
-    //Ok, non lo so , lo faccio alla brutta, traduco il mio vettore lungo 
-    // in una matrice e stampo la matrice
-    int n_cols = 40; //facciamo una roba in grande ora
-    int ** mat_op = new int*[rowcln[0]];
-         mat_op[0] = new int[ rowcln[0]*n_cols ];
- 
-   int  sum_prev_rows = 0;
-   for (uint i= 0; i< rowcln[0]; i++) { 
-             mat_op[i] = mat_op[0] + i*n_cols;    //sum of pointers, to keep contiguous in memory!!!
-	   for (uint j = 0; j< n_cols; j++) {  
-	       mat_op[i][j]  = 0;
-	     if ( j < (len[i+1] - len[i])) { mat_op[i][j] = Op_pos[ sum_prev_rows + j ]; }
-	  }
-  	     sum_prev_rows +=  (len[i+1] - len[i]);
-    }
-    
-    dimsf[0] = rowcln[0];    dimsf[1] = n_cols;
-    std::ostringstream name4;
-    name4 << groupname << "/" << "POS_MAT" << fe_family.str();
-    IO::print_Ihdf5(file,name4.str().c_str(),dimsf,&mat_op[0][0]);
-
-     delete [] mat_op[0];
-     delete [] mat_op;
-
-//===========================    
-    n_cols = 40;
-    double ** mat = new double*[rowcln[0]];
-           mat[0] = new double[ rowcln[0]*n_cols ];
-    
-   sum_prev_rows = 0;
-   for (uint i= 0; i< rowcln[0]; i++) { 
-             mat[i] = mat[0] + i*n_cols;    //sum of pointers, to keep contiguous in memory!!!
-	   for (uint j = 0; j< n_cols; j++) {  
-	       mat[i][j]  = 0;
-	     if ( j < (len[i+1] - len[i])) { mat[i][j] = Op_val[ sum_prev_rows + j ]; }
-	  }
-  	     sum_prev_rows +=  (len[i+1] - len[i]);
-    }
-    
-    dimsf[0] = rowcln[0];    dimsf[1] = n_cols;
-    std::ostringstream name5;
-    name5 << groupname << "/" << "VAL_MAT" << fe_family.str();
-    IO::print_Dhdf5(file,name5.str().c_str(),dimsf,&mat[0][0]);
-
-     delete [] mat[0];
-     delete [] mat;
-    
-    
-    H5Fclose(file);
-
-    return;
-}
 
 
 // ==================================================
@@ -876,7 +712,7 @@ void GenCase::PrintOneVarMGOperatorHDF5(const std::string & filename,const std::
 //stabiliti dalla suddivisione in proc e livelli
 
 
-void GenCase::ComputeProl()  {
+void GenCase::ComputeAndPrintProl(const std::string output_path)  {
 
   int NegativeOneFlag = -1;
   double   PseudoZero = 1.e-8;
@@ -885,7 +721,7 @@ void GenCase::ComputeProl()  {
     std::string ext_h5    = DEFAULT_EXT_H5;
 
     std::ostringstream name;
-    name << _files._output_path << "/" << f_prol << ext_h5;
+    name << output_path << "/" << f_prol << ext_h5;
     hid_t file = H5Fcreate(name.str().c_str(), H5F_ACC_TRUNC, H5P_DEFAULT,H5P_DEFAULT);
 
   for (int Level1 = 1; Level1 < _NoLevels; Level1++) {  //Level1 is the OUTPUT level (fine level) (the level of the ROWS)
@@ -1029,7 +865,7 @@ void GenCase::ComputeProl()  {
                 ki++;
             }
         }
-            PrintOneVarMGOperatorHDF5(name.str(),groupname_lev.str(),n_dofs_fe_lev[fe],count[fe],Prol_pos[fe],Prol_val[fe],len[fe],lenoff[fe],FEXLevel_f[fe],FEXLevel_c[fe],fe);
+            XDMFWriter::PrintOneVarMGOperatorHDF5(name.str(),groupname_lev.str(),n_dofs_fe_lev[fe],count[fe],Prol_pos[fe],Prol_val[fe],len[fe],lenoff[fe],FEXLevel_f[fe],FEXLevel_c[fe],fe);
 
           delete []  dof_extreme_at_coarse_lev_sd[fe];
 
@@ -1459,7 +1295,7 @@ void GenCase::ComputeProl()  {
 //remember that for the KK elements I dont need eliminating multiple occurrences
 
 
-void GenCase::ComputeMatrix() {
+void GenCase::ComputeAndPrintMatrix(const std::string output_path) {
 
 #ifdef DEFAULT_PRINT_INFO
     std::cout << " GenCase::compute_matrix:  start \n";
@@ -1486,7 +1322,7 @@ void GenCase::ComputeMatrix() {
     std::string ext_h5    = DEFAULT_EXT_H5;
 
         std::ostringstream name;
-        name << _files._output_path << "/" << f_matrix << ext_h5;
+        name << output_path << "/" << f_matrix << ext_h5;
         hid_t file = H5Fcreate(name.str().c_str(), H5F_ACC_TRUNC, H5P_DEFAULT,H5P_DEFAULT);
 
 //==============================================================
@@ -1676,7 +1512,7 @@ void GenCase::ComputeMatrix() {
 //============================================================
 //============== PRINT MatG,lenG,offG TO FILE ================
 
-                PrintOneVarMatrixHDF5(name.str(),groupname_lev.str(),n_dofs_lev_fe,countG[r][c],MatG[r][c],lenG[r][c],lenoffG[r][c],r,c,FELevel);
+                XDMFWriter::PrintOneVarMatrixHDF5(name.str(),groupname_lev.str(),n_dofs_lev_fe,countG[r][c],MatG[r][c],lenG[r][c],lenoffG[r][c],r,c,FELevel);
 
 //============================================================
 //============ DELETE THE CURRENT c ==========================
@@ -1796,7 +1632,7 @@ void GenCase::ComputeMatrix() {
 // otherwise, you would not just need to update the sparsity pattern
 
 
-void GenCase::ComputeRest( ) {
+void GenCase::ComputeAndPrintRest(const std::string output_path) {
 
   int NegativeOneFlag = -1;
   double   PseudoZero = 1.e-8;
@@ -1805,7 +1641,7 @@ void GenCase::ComputeRest( ) {
         std::string ext_h5    = DEFAULT_EXT_H5;
 
         std::ostringstream filename;
-        filename << _files._output_path << "/" << f_rest << ext_h5;
+        filename << output_path << "/" << f_rest << ext_h5;
         hid_t file = H5Fcreate(filename.str().c_str(), H5F_ACC_TRUNC, H5P_DEFAULT,H5P_DEFAULT);
 
   
@@ -2013,7 +1849,7 @@ void GenCase::ComputeRest( ) {
                 }
             }
 
-            PrintOneVarMGOperatorHDF5(filename.str(),groupname_lev.str(),n_dofs_fe_lev[fe],count[fe],Rest_pos[fe],Rest_val[fe],lenG[fe],lenoffG[fe],FEXLevel_c[fe],FEXLevel_f[fe],fe);
+            XDMFWriter::PrintOneVarMGOperatorHDF5(filename.str(),groupname_lev.str(),n_dofs_fe_lev[fe],count[fe],Rest_pos[fe],Rest_val[fe],lenG[fe],lenoffG[fe],FEXLevel_c[fe],FEXLevel_f[fe],fe);
 
             delete [] lenG[fe];
             delete [] lenoffG[fe];
@@ -2050,219 +1886,6 @@ void GenCase::ComputeRest( ) {
 }
 
 
-// ===============================================================
-void GenCase::PrintMeshFile() const  {
-
-    std::ostringstream name;
-
-    std::string basemesh  = DEFAULT_BASEMESH;
-    std::string ext_h5    = DEFAULT_EXT_H5;
-
-    std::ostringstream inmesh;
-    inmesh << _files._output_path << "/" << basemesh << ext_h5;
-
-//==================================
-// OPEN FILE
-//==================================
-    hid_t file = H5Fcreate(inmesh.str().c_str(), H5F_ACC_TRUNC, H5P_DEFAULT,H5P_DEFAULT);
-
-//==================================
-// DFLS (Dimension, VB, Levels, Subdomains)
-// =====================
-    int *tdata;
-
-    tdata    = new int[4];
-    tdata[0] = _dim;
-    tdata[1] = VB;
-    tdata[2] = _NoLevels;
-    tdata[3] = _NoSubdom;
-
-    hsize_t dimsf[2];
-    dimsf[0] = 4;
-    dimsf[1] = 1;
-    IO::print_Ihdf5(file,"DFLS", dimsf,tdata);
-    delete [] tdata;
-
-//==================================
-// FEM element DoF number
-// =====================
-    int *ttype_FEM;
-    ttype_FEM=new int[VB];
-
-    for (uint vb=0; vb< VB;vb++)   ttype_FEM[vb] = GetGeomEl(get_dim()-1-vb,QQ)._elnds;
-
-    dimsf[0] = VB;
-    dimsf[1] = 1;
-    IO::print_Ihdf5(file,"ELNODES_VB", dimsf,ttype_FEM);
-
-// ===========================================
-// ===========================================
-//  NODES
-// ===========================================
-// ===========================================
-    hid_t group_id = H5Gcreate(file, _nodes_name.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-
-// ++++ NODES/MAP ++++++++++++++++++++++++++++++++++++++++++++++
-    std::string ndmap = _nodes_name + "/MAP";
-    hid_t subgroup_id = H5Gcreate(file, ndmap.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-// nodes X lev
-    std::string ndxlev =  ndmap + "/NDxLEV";
-    dimsf[0] = _NoLevels+1;
-    dimsf[1] = 1;
-    IO::print_UIhdf5(file, ndxlev.c_str(), dimsf,_NoNodesXLev);
-
-// ++++++++++++++++++++++++++++++++++++++++++++++++++
-// node map (XL, extended levels)
-// ++++++++++++++++++++++++++++++++++++++++++++++++++
-    dimsf[0] = _n_nodes;
-    dimsf[1] = 1;
-
-    for (int ilev= 0;ilev < _NoLevels+1; ilev++) {
-        name.str("");
-        name << ndmap << "/MAP"<< "_XL" << ilev;
-        IO::print_Ihdf5(file,name.str(),dimsf,_Qnode_fine_Qnode_lev[ilev]);
-    }
-
-// ++++++++++++++++++++++++++++++++++++++++++++++++++
-//   OFF_ND: node offset quadratic and linear
-// ++++++++++++++++++++++++++++++++++++++++++++++++++
-    dimsf[0] = _NoSubdom*_NoLevels+1;
-    dimsf[1] = 1;
-    for (int fe=0;fe < QL_NODES; fe++) {
-        std::ostringstream namefe;
-        namefe <<  ndmap << "/OFF_ND" << "_F" << fe;
-        IO::print_Ihdf5(file, namefe.str(),dimsf,_off_nd[fe]);
-    }
-
-    H5Gclose(subgroup_id);
-
-// ===========================================
-//  COORDINATES  (COORD)
-// ===========================================
-    //ok, we need to print the coordinates of the nodes for each LEVEL
-    //The array _nod_coords holds the coordinates of the FINE Qnodes
-    //how do we take the Qnodes of each level?
-    //Well, I'd say we need to use  _off_nd for the quadratics
-    //Ok, the map _nd_fm_libm goes from FINE FEMUS NODE ORDERING to FINE LIBMESH NODE ORDERING
-    //I need to go from the QNODE NUMBER at LEVEL 
-    //to the QNODE NUMBER at FINE LEVEL according to FEMUS,
-    //and finally to the number at fine level according to LIBMESH.
-    //The fine level is the only one where the Qnode numbering is CONTIGUOUS
-    
-    
-    
-    std::string ndcoords = _nodes_name + "/COORD";
-    subgroup_id = H5Gcreate(file, ndcoords.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-
-    // nodes are PRINTED ACCORDING to FEMUS ordering, which is inode, i.e. the INVERSE of v[inode].second
-    //you use this because you do DIRECTLY a NODE LOOP
-    //now let us loop coordinates over ALL LEVELS
-    for (int l=0; l<_NoLevels; l++)  {
-    double * xcoord = new double[_NoNodesXLev[l]];
-    for (int kc=0;kc<3;kc++) {
-      
-      int Qnode_lev=0; 
-      for (uint isubdom=0; isubdom<_NoSubdom; isubdom++) {
-            uint off_proc=isubdom*_NoLevels;
-               for (int k1 = _off_nd[QQ][off_proc];
-                        k1 < _off_nd[QQ][off_proc + l+1 ]; k1++) {
-		 int Qnode_fine_fm = _Qnode_lev_Qnode_fine[l][Qnode_lev];
-		 xcoord[Qnode_lev] = _nd_coords_libm[ _nd_fm_libm[Qnode_fine_fm].second + kc*_n_nodes ];
-		  Qnode_lev++; 
-		 }
-	      } //end subdomain
-	    
-// old        for (int inode=0; inode <_n_nodes_lev[l];inode++)  xcoord[inode] = _nod_coords[_nd_fm_libm[inode].second+kc*_n_nodes]; //the offset is fine
-        dimsf[0] = _NoNodesXLev[l];
-        dimsf[1] = 1;
-        name.str("");
-        name << ndcoords << "/X" << kc+1<< "_L" << l;
-        IO::print_Dhdf5(file,name.str(), dimsf,xcoord);
-    }
-
-    delete [] xcoord;
-     }  //levels
-    
-    H5Gclose(subgroup_id);
-
-    H5Gclose(group_id);
-
-// ===========================================
-// ===========================================
-//   /ELEMS
-// ===========================================
-// ===========================================
-
-    group_id = H5Gcreate(file, _elems_name.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-
-    ElemStoBase** elsto_out;   //TODO delete it!
-    elsto_out = new ElemStoBase*[_n_elements_sum_levs[VV]];
-    for (int i=0;i<_n_elements_sum_levs[VV];i++) {
-        elsto_out[i]= static_cast<ElemStoBase*>(_el_sto[i]);
-    }
-
-    ElemStoBase** elstob_out;
-    elstob_out = new ElemStoBase*[_n_elements_sum_levs[BB]];
-    for (int i=0; i<_n_elements_sum_levs[BB]; i++) {
-        elstob_out[i]= static_cast<ElemStoBase*>(_el_sto_b[i]);
-    }
-
-    PrintElemVB(file,VV,_nd_libm_fm, elsto_out,_el_fm_libm);
-    PrintElemVB(file,BB,_nd_libm_fm, elstob_out,_el_fm_libm_b);
-
-    // ===============
-    // print child to father map for all levels for BOUNDARY ELEMENTS
-    // ===============
-
-    for (int lev=0;lev<_NoLevels; lev++)  {
-        std::ostringstream   bname;
-        bname << _elems_name << "/BDRY_TO_VOL_L" << lev;
-        dimsf[0] = _n_elements_vb_lev[BB][lev];
-        dimsf[1] = 1;
-        IO::print_Ihdf5(file,bname.str(), dimsf,_el_child_to_fath[lev]);
-    }
-
-
-
-
-//             std::cout <<  "==================" << std::endl;
-//          for (int i=0;i<_n_elements_vb_lev[BB][lev];i++)  {
-//              std::cout <<  _el_child_to_fath[lev][i] << std::endl;
-//        }
-// 	 }
-
-
-
-// ok, so, i had to do two cast vectors so i could pass them both to the print_elem_vb routine
-//now i have to be careful in destroying these, in relation with their fathers...
-
-    //delete temp  //I AM HERE TODO
-//     for (int i=0;i< _n_elements_sum_levs_vb[BB];i++) {   delete /*[]*/ elstob_out[i]; } // delete [] el_sto[i]; with [] it doesnt work
-//    delete [] elstob_out;
-//     for (int i=0;i< _n_elements_sum_levs_vb[VV];i++) {   delete /*[]*/ elsto_out[i]; } // delete [] el_sto[i]; with [] it doesnt work
-//    delete [] elsto_out;
-    H5Gclose(group_id);
-
-// ===========================================
-//   PID
-// ===========================================
-    group_id = H5Gcreate(file, "/PID", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    for (int  vb= 0; vb< VB;vb++) {
-        for (int  ilev= 0;ilev< _NoLevels; ilev++)   PrintSubdomFlagOnQuadrCells(vb,ilev,inmesh.str().c_str());
-    }
-
-    H5Gclose(group_id);
-
-// ===========================================
-//  CLOSE FILE
-// ===========================================
-    H5Fclose(file);
-
-    //============
-    delete [] ttype_FEM;
-
-    return;
-}
 
 
 
@@ -2488,122 +2111,6 @@ void GenCase::ComputeMaxElXNode() {
     delete []_elxnode;
 
     return;
-}
-
-
-// ==========================================================
-//prints conn and stuff for either vol or bdry mesh
-//When you have to construct the connectivity,
-//you go back to the libmesh elem ordering,
-//then you pick the nodes of that element in LIBMESH numbering,
-//then you pick the nodes in femus NUMBERING,
-//and that's it
-void GenCase::PrintElemVB(hid_t file,
-		       const uint vb ,
-		       const std::vector<int> & nd_libm_fm, 
-		       ElemStoBase** el_sto_in,
-		       const std::vector<std::pair<int,int> >  el_fm_libm_in ) const {
-
-// const unsigned from_libmesh_to_xdmf[27] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26};  //id
-// const unsigned from_libmesh_to_xdmf[27] = {0,1,2,3,4,5,6,7,8,9,10,11,16,17,18,19,12,13,14,15,21,22,23,24,20,25,26};  //from libmesh to femus
-// const unsigned from_libmesh_to_xdmf[27]    = {0,1,2,3,4,5,6,7,8,9,10,11,16,17,18,19,12,13,14,15,24,22,21,23,20,25,26};  //from libmesh to xdmf
-
-    std::ostringstream name;
-
-    std::string auxvb[VB];
-    auxvb[0]="0";
-    auxvb[1]="1";
-    std::string elems_fem = _elems_name;
-    std::string elems_fem_vb = elems_fem + "/VB" + auxvb[vb];  //VV later
-
-    hid_t subgroup_id = H5Gcreate(file, elems_fem_vb.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-
-    hsize_t dimsf[2];
-    dimsf[0] = 2;
-    dimsf[1] = 1;
-    int ndofm[2];
-    ndofm[0]=_elnodes[vb][QQ];
-    ndofm[1]=_elnodes[vb][LL];
-    IO::print_Ihdf5(file,(elems_fem_vb + "/NDOF_FO_F1"), dimsf,ndofm);
-    // NoElements ------------------------------------
-    dimsf[0] = _NoLevels;
-    dimsf[1] = 1;
-    IO::print_UIhdf5(file,(elems_fem_vb + "/NExLEV"), dimsf,_n_elements_vb_lev[vb]);
-    // offset
-    dimsf[0] = _NoSubdom*_NoLevels+1;
-    dimsf[1] = 1;
-    IO::print_Ihdf5(file,(elems_fem_vb + "/OFF_EL"), dimsf,_off_el[vb]);
-
-    //here you pick all the elements at all levels,
-    //and you print their connectivities according to the libmesh ordering
-    int *tempconn;
-    tempconn=new int[_n_elements_sum_levs[vb]*_elnodes[vb][QQ]]; //connectivity of all levels
-    
-// // //     if (_elnodes[vb][QQ] == 27)  { //HEX27
-// // // 
-// // //        for (int ielem=0;ielem<_n_elements_sum_levs[vb];ielem++) {
-// // //         for (uint inode=0;inode<_elnodes[vb][QQ];inode++) {
-// // //             int el_libm =   el_fm_libm_in[ielem].second;
-// // //             int nd_libm = el_sto_in[el_libm]->_elnds[inode];
-// // //             tempconn[ from_libmesh_to_xdmf[inode] + ielem*_elnodes[vb][QQ] ] = nd_libm_fm[nd_libm];
-// // //         }
-// // //     }      
-// // //     
-// // //     }//HEX27
-// // //     else {
-      
-    for (int ielem=0;ielem<_n_elements_sum_levs[vb];ielem++) {
-        for (uint inode=0;inode<_elnodes[vb][QQ];inode++) {
-            int el_libm =   el_fm_libm_in[ielem].second;
-            int nd_libm = el_sto_in[el_libm]->_elnds[inode];
-            tempconn[inode+ielem*_elnodes[vb][QQ]] = nd_libm_fm[nd_libm];
-        }
-    }
-    
-// // //   }
-  
-    dimsf[0] = _n_elements_sum_levs[vb]*_elnodes[vb][QQ];
-    dimsf[1] = 1;
-    IO::print_Ihdf5(file,(elems_fem_vb + "/CONN"), dimsf,tempconn);
-
-    // level connectivity ---------------------------------
-    for (int ilev=0;ilev <_NoLevels; ilev++) {
-
-        int *conn_lev=new int[_n_elements_vb_lev[vb][ilev]*_elnodes[vb][QQ]];  //connectivity of ilev
-
-        
-        int ltot=0;
-        for (int iproc=0;iproc <_NoSubdom; iproc++) {
-            for (int iel = _off_el[vb][iproc*_NoLevels+ilev];
-                     iel < _off_el[vb][iproc*_NoLevels+ilev+1]; iel++) {
-                for (uint inode=0;inode<_elnodes[vb][QQ];inode++) {
-                    conn_lev[ltot*_elnodes[vb][QQ] + inode ] =
-                        tempconn[  iel*_elnodes[vb][QQ] + inode ];
-                }
-                ltot++;
-            }
-        }
-        
-       
-        dimsf[0] = _n_elements_vb_lev[vb][ilev]*_elnodes[vb][QQ];
-        dimsf[1] = 1;
-
-        name.str("");
-        name << elems_fem_vb << "/CONN" << "_L" << ilev ;
-        IO::print_Ihdf5(file,name.str(), dimsf,conn_lev);
-        //clean
-        delete []conn_lev;
-
-    }
-
-
-    delete []tempconn;
-
-    H5Gclose(subgroup_id);
-
-    return;
-
-
 }
 
 

@@ -1,10 +1,8 @@
 #include "CurrentGaussPoint.hpp"
 
-#include "MultiLevelProblemTwo.hpp"
 #include "Math.hpp"
 #include "CurrentQuantity.hpp"
 #include "MultiLevelMeshTwo.hpp"
-#include "GeomEl.hpp"
 
 #include <cmath>
 
@@ -18,8 +16,8 @@ namespace femus {
 //maybe later on i'd just pass the GeomElement(GeomEl) and the MathElement(FE)
 //by the way, with the MultiLevelProblemTwo I reach the Utils, the Mesh, and so the GeomEl, and so on...
 template <unsigned int FM_DIM>
-CurrentGaussPoint<FM_DIM>::CurrentGaussPoint(const CurrentElem & curr_el_in, MultiLevelProblemTwo& e_map_in ): 
-        CurrentGaussPointBase(curr_el_in,e_map_in) {
+CurrentGaussPoint<FM_DIM>::CurrentGaussPoint(const CurrentElem & curr_el_in, const Gauss & qrule_in): 
+        CurrentGaussPointBase(curr_el_in,qrule_in) {
   
  
 }
@@ -275,7 +273,7 @@ double CurrentGaussPoint<FM_DIM>::JacVectBB_g(CurrentQuantity& xyz )/* const*/ {
   
   //here you check assert(_is_ready_for_Jac);
 
-//     const uint spacedim = _eqnmap._mesh._dim;
+//     const uint spacedim = GetMLProb()._mesh._dim;
 
     const uint    Order = xyz._FEord;  //order of the coordinate transformation 
     const uint     xoff = xyz._ndof;

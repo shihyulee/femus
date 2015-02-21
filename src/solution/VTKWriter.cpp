@@ -20,7 +20,7 @@
 #include "MultiLevelProblem.hpp"
 #include "NumericVector.hpp"
 #include <b64/b64.h>
-#include "iostream"
+#include <iostream>
 #include <fstream>
 #include <sstream>   
 #include "string.h"
@@ -32,9 +32,10 @@
 namespace femus {
 
 
+ short unsigned int VTKWriter::femusToVtkCellType[3][6]= {{12,10,13,9,5,3},{25,24,26,23,22,21},{29,24,32,28,22,21}};
 
 
-VTKWriter::VTKWriter(MultiLevelSolution& ml_probl): Writer(ml_probl)
+VTKWriter::VTKWriter(MultiLevelSolution & ml_probl): Writer(ml_probl)
 {
   
 }
@@ -45,9 +46,12 @@ VTKWriter::~VTKWriter()
 }
 
 
-void VTKWriter::write_system_solutions(const char order[], std::vector<std::string>& vars, const unsigned time_step) 
+void VTKWriter::write_system_solutions(const std::string output_path, const char order[], std::vector<std::string>& vars, const unsigned time_step) 
 { 
-  bool test_all=!(vars[0].compare("All"));
+  bool print_all = 0;
+  for (unsigned ivar=0; ivar < vars.size(); ivar++){
+    print_all += !(vars[ivar].compare("All")) + !(vars[ivar].compare("all")) + !(vars[ivar].compare("ALL"));
+  }
   
   int icount;
   unsigned index=0;
@@ -65,7 +69,7 @@ void VTKWriter::write_system_solutions(const char order[], std::vector<std::stri
   
  
   std::ostringstream filename;
-  filename << "./output/mesh.level" << _gridn << "." << time_step << "." << order << ".vtu"; 
+  filename << output_path << "/sol.level" << _gridn << "." << time_step << "." << order << ".vtu"; 
   std::ofstream fout;
   
   if(_iproc!=0) {
@@ -78,10 +82,11 @@ void VTKWriter::write_system_solutions(const char order[], std::vector<std::stri
     }
     else {
       std::cout << std::endl << " The output file "<< filename.str() <<" cannot be opened.\n";
-      exit(0);
+      abort();
     }
   }
-  // haed ************************************************
+  
+  // head ************************************************
   fout<<"<?xml version=\"1.0\"?>" << std::endl;
   fout<<"<VTKFile type = \"UnstructuredGrid\" version=\"0.1\" byte_order=\"LittleEndian\">" << std::endl;
   fout << " <UnstructuredGrid>" << std::endl;
@@ -398,8 +403,8 @@ void VTKWriter::write_system_solutions(const char order[], std::vector<std::stri
   
 
   //Print Solution (on element) ***************************************************************
-  for (unsigned i=0; i<(1-test_all)*vars.size()+test_all*_ml_sol.GetSolutionSize(); i++) {
-    unsigned indx=(test_all==0)?_ml_sol.GetIndex(vars[i].c_str()):i;
+  for (unsigned i=0; i<(!print_all)*vars.size() + print_all*_ml_sol.GetSolutionSize(); i++) {
+    unsigned indx=( print_all == 0 ) ? _ml_sol.GetIndex(vars[i].c_str()):i;
     if (3 <= _ml_sol.GetSolutionType(indx)) {
       fout << "    <DataArray type=\"Float32\" Name=\"" << _ml_sol.GetSolutionName(indx) <<"\" format=\"binary\">" << std::endl;
       // point pointer to common memory area buffer of void type;
@@ -445,8 +450,8 @@ void VTKWriter::write_system_solutions(const char order[], std::vector<std::stri
    
   // point pointer to common memory area buffer of void type;
   float* var_nd = static_cast<float*>(buffer_void);
-  for (unsigned i=0; i<(1-test_all)*vars.size()+test_all*_ml_sol.GetSolutionSize(); i++) {
-    unsigned indx=(test_all==0)?_ml_sol.GetIndex(vars[i].c_str()):i;
+  for (unsigned i=0; i<(!print_all)*vars.size()+ print_all*_ml_sol.GetSolutionSize(); i++) {
+    unsigned indx=( print_all == 0 )?_ml_sol.GetIndex(vars[i].c_str()):i;
     if (_ml_sol.GetSolutionType(indx)<3) {
       fout << " <DataArray type=\"Float32\" Name=\"" << _ml_sol.GetSolutionName(indx) <<"\" format=\"binary\">" << std::endl;
       //print solutions on nodes dimension

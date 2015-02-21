@@ -15,12 +15,10 @@
 
 #include "CurrentElem.hpp"
 #include "SystemTwo.hpp"
-#include "MultiLevelProblemTwo.hpp"
 #include "MultiLevelMeshTwo.hpp"
-#include "GeomEl.hpp"
+#include "Domain.hpp"
 #include "ElemType.hpp"
 #include "DofMap.hpp"
-
 
 #include "CurrentQuantity.hpp"
 
@@ -29,28 +27,29 @@ namespace femus {
 
 
 
-    CurrentElem::CurrentElem(const uint vb, const SystemTwo * eqn_in, const MultiLevelMeshTwo& mesh, const std::vector< std::vector<elem_type*> >  & elem_type ):
+    CurrentElem::CurrentElem(const uint level, const uint vb, const SystemTwo * eqn_in, const MultiLevelMeshTwo& mesh, const std::vector< std::vector<const elem_type*> >  & elem_type_in ):
     _eqn(eqn_in),
     _mesh(mesh),
-    _elem_type(elem_type),
     _dim(_mesh.get_dim()-vb),
-    _mesh_vb(vb)
+    _elem_type(elem_type_in[mesh.get_dim()-vb -1]),
+    _mesh_vb(vb),
+    _Level(level)
     {
     
 //========== Current "Geometric Element"  ========================
-   const uint mesh_ord = (int) _mesh.GetRuntimeMap().get("mesh_ord");
-  uint elnodes = _mesh.GetGeomEl(_dim-1,mesh_ord)._elnds;     //TODO the mesh is quadratic
-  _el_conn = new uint[ elnodes ];   
-   _xx_nds = new double[_mesh.get_dim()*elnodes ];
-    _el_xm = new double[_mesh.get_dim()];  
+  uint elnodes = NVE[ _mesh._geomelem_flag[_dim-1] ][BIQUADR_FE];
+  _el_conn.resize(elnodes);
+  _el_conn_new.resize(elnodes);   
+   _xx_nds.resize(_mesh.get_dim()*elnodes);
+    _el_xm.resize(_mesh.get_dim());  
 //========== Current "Geometric Element"  ========================
 
 //========== Current "Equation Element"  ========================
   _el_n_dofs = 0;
-     for (int fe = 0; fe < QL; fe++) {  _el_n_dofs += (_elem_type[_dim-1][fe]->GetNDofs() )*_eqn->_dofmap._nvars[fe]; }
+     for (int fe = 0; fe < QL; fe++) {  _el_n_dofs += (_elem_type[fe]->GetNDofs() )*_eqn->_dofmap._nvars[fe]; }
 
   _el_dof_indices.resize(_el_n_dofs);
-  _bc_eldofs = new uint[_el_n_dofs];
+  _bc_eldofs.resize(_el_n_dofs);
   _KeM.resize(_el_n_dofs,_el_n_dofs);
   _FeM.resize(_el_n_dofs);
 //========== Current "Equation Element"  ========================
@@ -59,13 +58,7 @@ namespace femus {
   }
  
 
-    CurrentElem::~CurrentElem() {
-      
- delete [] _el_conn;
- delete [] _xx_nds;
- delete []  _el_xm;     
-      
-  }
+    CurrentElem::~CurrentElem() {}
     
     
     
@@ -76,32 +69,32 @@ namespace femus {
 
 
 
-void CurrentElem::SetElDofsBc(const uint Level)  {
+void CurrentElem::SetElDofsBc()  {
 
-/*CHECK*/   if (_vol_iel_DofObj >= _mesh._n_elements_vb_lev[VV][Level] ) { std::cout << "Out of the node_dof map FE KK range" << std::endl; abort();}
+/*CHECK*/   if (_vol_iel_DofObj >= _mesh._n_elements_vb_lev[VV][_Level] ) { std::cout << "Out of the node_dof map FE KK range" << std::endl; abort();}
 
   const uint Lev_pick_bc_dof = _mesh._NoLevels -1;  //we use the FINE Level as reference
   
 int off_local_el[QL];
 off_local_el[QQ] = 0;
-off_local_el[LL] = _eqn->_dofmap._nvars[QQ]*(_elem_type[_dim-1][QQ]->GetNDofs() );
-off_local_el[KK] = _eqn->_dofmap._nvars[QQ]*(_elem_type[_dim-1][QQ]->GetNDofs() ) + _eqn->_dofmap._nvars[LL]*(_elem_type[_dim-1][LL]->GetNDofs() );
+off_local_el[LL] = _eqn->_dofmap._nvars[QQ]*(_elem_type[QQ]->GetNDofs() );
+off_local_el[KK] = _eqn->_dofmap._nvars[QQ]*(_elem_type[QQ]->GetNDofs() ) + _eqn->_dofmap._nvars[LL]*(_elem_type[LL]->GetNDofs() );
   
 
  int DofObj = 0;
 for (int fe=0; fe < QL; fe++) {
 for (uint ivar=0; ivar < _eqn->_dofmap._nvars[fe]; ivar++)    {
-      for (uint d=0; d< _elem_type[_dim-1][fe]->GetNDofs(); d++)    {
+      for (uint d=0; d< _elem_type[fe]->GetNDofs(); d++)    {
 	
 	     if (fe < KK )       DofObj =        _el_conn[d];
 	     else if (fe == KK)  DofObj = _vol_iel_DofObj;
 	     
-          const uint     indx  = d + ivar*_elem_type[_dim-1][fe]->GetNDofs() + off_local_el[fe];
-	  _el_dof_indices[indx] = _eqn->_dofmap.GetDof(Level,fe,ivar,DofObj);
+          const uint     indx  = d + ivar*_elem_type[fe]->GetNDofs() + off_local_el[fe];
+	  _el_dof_indices[indx] = _eqn->_dofmap.GetDof(_Level,fe,ivar,DofObj);
 
          if (fe < KK ) { const uint dofkivar = _eqn->_dofmap.GetDof(Lev_pick_bc_dof,fe,ivar,DofObj); 
-             _bc_eldofs[indx] = _eqn->_bc[dofkivar]; }
-         else if (fe == KK)    _bc_eldofs[indx] = _eqn->_bc_fe_kk[Level][ DofObj + ivar*_eqn->_dofmap._DofNumLevFE[Level][KK] ];
+             _bc_eldofs[indx] = _eqn->_bcond._bc[dofkivar]; }
+         else if (fe == KK)    _bc_eldofs[indx] = _eqn->_bcond._bc_fe_kk[_Level][ DofObj + ivar*_eqn->_dofmap._DofNumLevFE[_Level][KK] ];
 	 }
     } 
 } // end fe
@@ -149,8 +142,7 @@ for (uint ivar=0; ivar < _eqn->_dofmap._nvars[fe]; ivar++)    {
 void CurrentElem::PrintOrientation() const {
   
       const uint mesh_dim = _mesh.get_dim();
-      const uint mesh_ord = (int) _mesh.GetRuntimeMap().get("mesh_ord");
-      const uint el_nnodes   = _mesh.GetGeomEl(_dim -1,mesh_ord)._elnds;
+      const uint el_nnodes   = NVE[ _mesh._geomelem_flag[_dim-1] ][BIQUADR_FE];
 
        std::vector<double>   xi(mesh_dim,0.);
        std::vector<double>  eta(mesh_dim,0.);
@@ -185,7 +177,7 @@ void CurrentElem::PrintOrientation() const {
  
  
 // ========================================================
-//   void CurrentElem::set_el_nod_conn_lev_subd(const uint Level,const uint isubd_in,const uint iel,
+//   void CurrentElem::SetDofobjConnCoords(const uint Level,const uint isubd_in,const uint iel,
 // 				uint el_conn[], double xx[]) const {///get the global node numbers for that element and their coordinates
 ///this routine does not yield the connectivity
 //is this function called when the class members are already filled?
@@ -214,13 +206,11 @@ void CurrentElem::PrintOrientation() const {
 
 // ========================================================
 ///Compute the element center
-///TODO must do this in the QUADRATIC case
 
-  void CurrentElem::SetMidpoint() const {
+  void CurrentElem::SetMidpoint() {
 
     const uint mesh_dim = _mesh.get_dim();
-    const uint mesh_ord = (int) _mesh.GetRuntimeMap().get("mesh_ord");    
-    const uint el_nnodes   = _mesh.GetGeomEl(_dim-1, mesh_ord)._elnds;
+    const uint el_nnodes   = NVE[ _mesh._geomelem_flag[_dim-1] ][BIQUADR_FE];
 
        for (uint idim=0; idim< mesh_dim; idim++)  _el_xm[idim]=0.;
 
@@ -237,15 +227,14 @@ void CurrentElem::PrintOrientation() const {
   }
 
    // =====================================================================================
-  void CurrentElem::set_el_nod_conn_lev_subd(const uint Level,const uint isubd_in,const uint iel) {
+  void CurrentElem::SetDofobjConnCoords(const uint isubd_in,const uint iel) {
 
     const uint mydim = _mesh.get_dim();
-    const uint mesh_ord = (int) _mesh.GetRuntimeMap().get("mesh_ord");    
-    const uint el_nnodes   = _mesh.GetGeomEl(_dim-1,mesh_ord)._elnds;
+    const uint el_nnodes   = NVE[ _mesh._geomelem_flag[_dim-1] ][BIQUADR_FE];
           
    for (uint n=0; n<el_nnodes; n++)    {
 
-     _el_conn[n] = _mesh._el_map[_mesh_vb][( iel + _mesh._off_el[_mesh_vb][_mesh._NoLevels*isubd_in + Level] )*el_nnodes+n];
+     _el_conn[n] = _mesh._el_map[_mesh_vb][( iel + _mesh._off_el[_mesh_vb][_mesh._NoLevels*isubd_in + _Level] )*el_nnodes+n];
 
       for (uint idim=0; idim < mydim; idim++) {
         const uint indxn = n+idim*el_nnodes;
@@ -255,10 +244,10 @@ void CurrentElem::PrintOrientation() const {
    
    
     int sum_elems_prev_sd_at_lev = 0;
-      for (uint pr = 0; pr< isubd_in; pr++) { sum_elems_prev_sd_at_lev += _mesh._off_el[_mesh_vb][_mesh._NoLevels*pr + Level + 1] - _mesh._off_el[_mesh_vb][ _mesh._NoLevels*pr + Level]; }
+      for (uint pr = 0; pr< isubd_in; pr++) { sum_elems_prev_sd_at_lev += _mesh._off_el[_mesh_vb][_mesh._NoLevels*pr + _Level + 1] - _mesh._off_el[_mesh_vb][ _mesh._NoLevels*pr + _Level]; }
     uint iel_DofObj = iel + sum_elems_prev_sd_at_lev;
     if       (_mesh_vb == VV)  { _vol_iel_DofObj = iel_DofObj; }   
-    else if  (_mesh_vb == BB)  { _vol_iel_DofObj = _mesh._el_bdry_to_vol[Level][iel_DofObj]; }  
+    else if  (_mesh_vb == BB)  { _vol_iel_DofObj = _mesh._el_bdry_to_vol[_Level][iel_DofObj]; }  
    
 
    
@@ -280,8 +269,7 @@ void CurrentElem::ConvertElemCoordsToMappingOrd(CurrentQuantity& myvect) const {
   
   const uint  elndof = myvect._ndof;
   const uint vectdim = myvect._dim;
-  const uint mesh_ord = (int) _mesh.GetRuntimeMap().get("mesh_ord");    
-  const uint offset = _mesh.GetGeomEl(GetDim()-1, mesh_ord)._elnds;
+  const uint offset = NVE[ _mesh._geomelem_flag[_dim-1] ][BIQUADR_FE];
  
  //TODO ASSERT
  /* assert(*/ if (elndof > offset) {std::cout << "Quadratic transformation over linear mesh " << std::endl;abort();}  /*);*/
@@ -301,7 +289,47 @@ void CurrentElem::ConvertElemCoordsToMappingOrd(CurrentQuantity& myvect) const {
 
  }   
    
+//=================================
+//TODO deprecated
+//This function is for NS type equations:
+//it computes the flags for pressure and stress integrals 
+//based on the pressure nodes
+ int CurrentElem::Bc_ComputeElementBoundaryFlagsFromNodalFlagsForPressure(const CurrentQuantity & Velold_in,const CurrentQuantity& press_in) const {
+   
+   int press_fl = 0;
+   
+	const uint el_ndof_p =  press_in._ndof;
+	const uint el_ndof_u =  Velold_in._ndof;
+	const uint   nvars_u =  Velold_in._dim;
+        int press_sum=0;
+           for (uint i=0; i< el_ndof_p; i++)   press_sum += _bc_eldofs[nvars_u*el_ndof_u + i]; //only one linear variable... pay attention when trying linear-linear
+            if ( press_sum ==0 )                 {  press_fl = 1; }   //ALL zeros: ONLY PRESSURE
 
+  
+    return press_fl;
+  }
+
+  
+// ========================================================
+//This function transforms the node coordinates into the reference node coordinates
+  void CurrentElem::TransformElemNodesToRef(Domain* mydom, double* refbox_xyz) {
+   
+   std::vector<double>   x_in(_dim);
+   std::vector<double>   x_out(_dim);
+  const uint el_nds = _xx_nds.size()/_mesh.get_dim();
+
+      for ( uint n=0; n < el_nds; n++ ) {
+	
+   for ( uint idim=0; idim < _dim; idim++ )  x_in[idim] = _xx_nds[n + idim*el_nds];
+  
+  mydom->TransformPointToRef(&x_in[0],&x_out[0]);
+
+   for ( uint idim=0; idim < _dim; idim++ )  refbox_xyz[n + idim*el_nds] = x_out[idim];
+   
+      }
+   
+  return; 
+ }
 
 } //end namespace femus
 

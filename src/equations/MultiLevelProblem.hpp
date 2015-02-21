@@ -2,7 +2,7 @@
 
  Program: FEMuS
  Module: MultiLevelProblem
- Authors: Eugenio Aulisa, Simone Bnà
+ Authors: Eugenio Aulisa, Simone Bnà, Giorgio Bornia
 
  Copyright (c) FEMuS
  All rights reserved.
@@ -28,6 +28,8 @@
 #include <vector>
 #include <map>
 
+#include "GaussPoints.hpp"
+#include "FemusInputParser.hpp"
 
 namespace femus {
 
@@ -37,6 +39,11 @@ using std::map;
 // Forward declarations
 //------------------------------------------------------------------------------
 class System;
+
+class MultiLevelMeshTwo;
+class elem_type;
+class QuantityMap;
+
 
 typedef double (*initfunc) (const double &x, const double &y, const double &z);
 
@@ -49,8 +56,10 @@ class MultiLevelProblem {
 public:
 
     /** Constructor */
-    MultiLevelProblem(MultiLevelMesh *ml_msh, MultiLevelSolution *ml_sol);
+    //MultiLevelProblem(MultiLevelMesh *ml_msh, MultiLevelSolution *ml_sol);
 
+    MultiLevelProblem(MultiLevelSolution *ml_sol);
+    
     /** Destructor */
     ~MultiLevelProblem() {};
 
@@ -158,7 +167,43 @@ public:
         _gridn++;
     };
     
+    /** returns the beginning of the systems map */
+  inline system_iterator       begin()       { return _systems.begin(); }
+
+    /**  */
+  inline system_iterator         end()       { return _systems.end(); }
+
+    /**  */
+  inline const_system_iterator begin() const { return _systems.begin(); }
+  
+    /**  */
+  inline const_system_iterator   end() const { return _systems.end(); }
+   
+    /**  New get/set for new data */
+  inline void SetMeshTwo(const MultiLevelMeshTwo * mesh_in)  {   _mesh = mesh_in; return; }
+  
+  inline const  MultiLevelMeshTwo & GetMeshTwo() const { return  *_mesh; }
+  
+    /** Quantity Map */
+  inline void SetQtyMap(const QuantityMap * qtymap_in) { _qtymap = qtymap_in; return; }
+   
+  inline const QuantityMap & GetQtyMap() const { return  *_qtymap; }
+
+    /** ElemType and Quadrature rule */
+  inline const std::vector<const elem_type*>  & GetElemType(const unsigned dim) const { return  _elem_type[dim - 1]; }
     
+  inline const std::vector< std::vector<const elem_type*> >  & GetElemType() const { return  _elem_type; }
+
+  inline const Gauss & GetQrule(const unsigned dim) const { return _qrule[dim - 1]; }
+  
+  void SetQruleAndElemType(const std::string quadr_order_in);
+  
+    /** Input Parser */
+  inline const FemusInputParser<double> &  GetInputParser() const { return *_phys; }
+
+  void SetInputParser(const FemusInputParser<double> * parser_in) { _phys = parser_in; return; }
+
+   
 private:
 
     // member data
@@ -166,6 +211,13 @@ private:
     unsigned short _gridn;
     unsigned short _gridr;
 
+    std::vector< std::vector<const elem_type*> >  _elem_type;
+    std::vector<Gauss>                      _qrule;
+    const FemusInputParser<double>        * _phys;
+    const QuantityMap                     * _qtymap;
+    const MultiLevelMeshTwo               * _mesh;
+
+    
 };
 
 template <typename T_sys>

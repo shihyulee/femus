@@ -3,7 +3,8 @@
 #include "Quantity.hpp"
 #include "CurrentElem.hpp"
 #include "ElemType.hpp"
-#include "MultiLevelProblemTwo.hpp"
+#include "MultiLevelProblem.hpp"
+#include "SystemTwo.hpp"
 #include "MultiLevelMeshTwo.hpp"
 
 
@@ -137,7 +138,7 @@ void CurrentQuantity::VectWithQtyFillBasic() {
     _eqnptr   = _qtyptr->_eqn; 
     _dim      = _qtyptr->_dim;
     _FEord    = _qtyptr->_FEord;
-    _ndof     = _currEl._elem_type[_currEl.GetDim()-1][_FEord]->GetNDofs();
+    _ndof     = _currEl.GetElemType(_FEord)->GetNDofs();
 
     return;
 }
@@ -174,7 +175,7 @@ void CurrentQuantity::ExtendDofs() {
   //set to zero
   for (uint eln=0; eln<el_ndofs; eln++)  {
     for (uint i=0; i<3; i++) {
-       _val_dofs3D[eln+i*el_ndofs]=0.;
+       _val_dofs3D[eln+i*el_ndofs] = 0.;
     }
   }
 //extend
@@ -236,7 +237,8 @@ void CurrentQuantity::ExtendDofs() {
 // In the same way in the FINE RHS we have the true rhs,
 // while in all the other rhs we have the RESIDUALS.
 
-void CurrentQuantity::GetElemDofs(const uint Level)  {
+//TODO this routine must be fixed a lot
+void CurrentQuantity::GetElemDofs()  {
   
   //we should put some try catch or something, to make sure that what we are calling here is already correctly filled as it should be
   //TODO FROM EQUATION HERE
@@ -244,7 +246,7 @@ void CurrentQuantity::GetElemDofs(const uint Level)  {
     if ( _eqnptr == NULL ) {std::cout << " We need the Equation here" << std::endl; abort();}
 
   
-  const uint Lev_pick_dof = _eqnptr->_NoLevels-1;  //we use the FINE Level as reference //TODO wait, this is a mistake!!!
+  const uint Lev_pick_dof = _eqnptr->GetGridn()-1;  //we use the FINE Level as reference //TODO wait, this is a mistake!!!
   // of course you want to take from the FINE LEVEL, but ONLY FOR THE NODES!!! FOR the ELEMENTS you have to take from EACH LEVEL!!!
   // or, you still have to take from the FINE provided that you give a map from element to fine!!!
   
@@ -260,12 +262,12 @@ void CurrentQuantity::GetElemDofs(const uint Level)  {
   
   const uint vect_ord = _FEord;
   int length_nodedof [QL];  
-  length_nodedof[QQ] = _currEl._mesh._NoNodesXLev[_eqnptr->_NoLevels-1];
-  length_nodedof[LL] = _currEl._mesh._NoNodesXLev[_eqnptr->_NoLevels-1];
-  length_nodedof[KK] = _currEl._mesh._n_elements_vb_lev[VV][Level];
+  length_nodedof[QQ] = _currEl._mesh._NoNodesXLev[_eqnptr->GetGridn() - 1];
+  length_nodedof[LL] = _currEl._mesh._NoNodesXLev[_eqnptr->GetGridn() - 1];
+  length_nodedof[KK] = _currEl._mesh._n_elements_vb_lev[VV][_currEl.GetLevel()];
 
    int off_total = 0;
-   for (uint i = 0; i < _qtyptr->_pos; i++) off_total += _eqnptr->_QtyInternalVector[i]->_dim * _eqnptr->_dofmap._DofNumLevFE[ Level ][ _eqnptr->_QtyInternalVector[i]->_FEord ];
+   for (uint i = 0; i < _qtyptr->_pos; i++) off_total += _eqnptr->GetUnknownQuantitiesVector()[i]->_dim * _eqnptr->_dofmap._DofNumLevFE[ _currEl.GetLevel() ][ _eqnptr->GetUnknownQuantitiesVector()[i]->_FEord ];
 
    int DofObj = 0;
 
@@ -277,7 +279,7 @@ void CurrentQuantity::GetElemDofs(const uint Level)  {
 	     if (vect_ord < KK )       DofObj = _currEl.GetConn()[d];
 	     else if (vect_ord == KK)  DofObj = _currEl.GetVolIel();
 	       
-	const uint dofkivar = _eqnptr->_dofmap.GetDof(Lev_pick_dof,vect_ord,ivar,DofObj);
+                 const uint dofkivar = _eqnptr->_dofmap.GetDofPosIn(Lev_pick_dof,DofObj + ivar*length_nodedof[vect_ord] + off_total);
 
 	       if (vect_ord < KK ) { _val_dofs[indx] =  ( *(_eqnptr->_x_old[Lev_pick_dof]) )(dofkivar);  }
 
@@ -306,34 +308,6 @@ void CurrentQuantity::GetElemDofs(const uint Level)  {
    return; 
   }
   
-  
-  
-//   void CurrentQuantity::SetElDofsFromArgs(const uint vb,const double * dofs_in) const {
-// 
-//   
-//   const uint  elndof = myvect._ndof[vb];
-//   const uint vectdim = myvect._dim;
-//   const uint mesh_ord = (int) _eqnmap._utils._urtmap.get("mesh_ord");    
-//   const uint offset = _eqnmap._mesh.GetGeomEl(_eqnmap._mesh.get_dim()-1-vb,mesh_ord)._elnds;
-//  
-//  //TODO ASSERT
-//  /* assert(*/ if (elndof > offset) {std::cout << "Quadratic transformation over linear mesh " << std::endl;abort();}  /*);*/
-//   
-//   //information for passing from mesh to dofs
-//   
-//     for (uint d=0; d < _ndof[vb]; d++) {
-// 	                                        
-//       for (uint idim=0; idim < _dim; idim++) {
-//           const uint     indxq  =    d + idim*_ndof[vb];
-// 
-// 	  _val_dofs[indxq] = dofs_in[d+idim*offset];
-//       }
-//     }
-// 
-//   return;
-// 
-//  }
-
 
 
 } //end namespace femus

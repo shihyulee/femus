@@ -15,9 +15,9 @@
 #define DEFAULT_EXT_LOG        ".log"
 #define DEFAULT_AUX_XDMF       "Xdmf.dtd" 
 // // // // # ----  Mesh class ----
-#define DEFAULT_BASEMESH      "mesh" 
-#define DEFAULT_MULTIMESH     "multimesh" 
-#define DEFAULT_CONNLIN       "_conn_lin" 
+#define DEFAULT_BASEMESH_LIN  "mesh_linear"
+#define DEFAULT_BASEMESH_BIQ  "_biquadratic"
+#define DEFAULT_BASEMESH      "mesh_biquadratic" 
 // // // // # ----  Multigrid  --------------
 #define DEFAULT_F_MATRIX     "Matrix" 
 #define DEFAULT_F_PROL       "Prol" 
@@ -28,9 +28,7 @@
 #define DEFAULT_BASETIME      "time" 
 // // // // # ---- RESTART -------- // # if a run reaches the end, then we write it as a "default restart" run
 #define DEFAULT_LAST_RUN      "run_to_restart_from"
-#define DEFAULT_CASE_DATA     "case.txt"
-// // // // # ----  BCHandling  -------------- // # external ibc file
-#define DEFAULT_IBC           "case" 
+// // // // # ----  BCHandling  --------------
 #define DEFAULT_BDRY_SUFFIX   "_bd"
 // // // // # ----  log  --------------
 #define DEFAULT_RUN_LOG       "run"

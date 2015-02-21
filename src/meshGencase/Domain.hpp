@@ -1,3 +1,18 @@
+/*=========================================================================
+
+ Program: FEMUS
+ Module: Domain
+ Authors: Giorgio Bornia
+
+ Copyright (c) FEMTTU
+ All rights reserved.
+
+ This software is distributed WITHOUT ANY WARRANTY; without even
+ the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ PURPOSE.  See the above copyright notice for more information.
+
+=========================================================================*/
+
 #ifndef __domain_h__
 #define __domain_h__
 
@@ -15,10 +30,6 @@ namespace femus {
 //------------------------------ 
 
 //if we make the constructor protected, then this class cannot be directly instantiated
-// in fact this is only a Base class
-//Base for Equations: SystemTwo
-//Base for Quantities: Quantity
-//Base for Domains: Domain
 
  class Domain {
 

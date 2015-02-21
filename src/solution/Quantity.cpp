@@ -16,7 +16,6 @@
 #include "Quantity.hpp"
 
 #include "MultiLevelMeshTwo.hpp"
-#include "GeomEl.hpp"
 
 #include <vector>
 
@@ -25,7 +24,6 @@ namespace femus {
 
 
 
-//  MultiLevelProblemTwo equations_map(utils,phys, phys_usr,mesh,femap,time_loop);
 //What does the Quantity need? 
 //The Physics? Yes, for the ref values, and so on
 //The Mesh? Yes,through the physics
@@ -66,15 +64,13 @@ namespace femus {
    _dim   = dim_in;
    _FEord = FEord_in;
    _eqn   = NULL; //initialize to NULL: by default the Quantity has no associated Equation
-   _refvalue = new double[_dim];
+   _refvalue.resize(_dim);
    for (uint i=0; i<_dim; i++)  _refvalue[i] = 1.; //default
    
    
   }
 
- Quantity::~Quantity() { 
-  delete [] _refvalue; 
- }
+ Quantity::~Quantity() {}
 
 
 
@@ -105,8 +101,7 @@ void Quantity::FunctionDof(CurrentQuantity& myvect, const double t, const double
 //====the Domain
   const uint space_dim = myvect.GetCurrentElem()._mesh.get_dim();
   double* xp = new double[space_dim]; 
-  const uint mesh_ord = (int) myvect.GetCurrentElem()._mesh.GetRuntimeMap().get("mesh_ord");    
-  const uint offset   =       myvect.GetCurrentElem()._mesh.GetGeomEl(myvect.GetCurrentElem().GetDim()-1,mesh_ord)._elnds;
+  const uint offset   =       NVE[ _qtymap.GetMeshTwo()->_geomelem_flag[myvect.GetCurrentElem().GetDim()-1] ][BIQUADR_FE];
 
 //=====the Function
   double* func = new double[myvect._dim];
@@ -132,15 +127,6 @@ if (dof_off > offset) {std::cout << "Use a quadratic mesh for FunctionDof comput
 
 }  
   
-  
-  
-  ////////////////QTY MAP ////////////
-  
-  
-  QuantityMap::QuantityMap(const MultiLevelMeshTwo & mesh, const FemusInputParser<double> * map_in) : _mesh(mesh),_physmap(map_in) { }
-  
-
-
 
 
 } //end namespace femus

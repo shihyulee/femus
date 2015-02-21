@@ -1,7 +1,18 @@
-// ==================================================================
-//                  Class TimeLoop
-// ==================================================================
-// lib include
+/*=========================================================================
+
+ Program: FEMUS
+ Module: TimeLoop
+ Authors: Giorgio Bornia
+
+ Copyright (c) FEMTTU
+ All rights reserved.
+
+ This software is distributed WITHOUT ANY WARRANTY; without even
+ the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+ PURPOSE.  See the above copyright notice for more information.
+
+=========================================================================*/
+
 #include <fstream>
 #include <sstream>
 #include <iomanip>
@@ -10,12 +21,13 @@
 
 
 #include "TimeLoop.hpp"
-#include "MultiLevelProblemTwo.hpp"
+#include "MultiLevelProblem.hpp"
 #include "Files.hpp"
 #include "MultiLevelMeshTwo.hpp"
 #include "FemusInputParser.hpp"
 #include "NumericVector.hpp"
 #include "SparseMatrix.hpp"
+#include "XDMFWriter.hpp"
 
 #include "paral.hpp"
 
@@ -37,11 +49,11 @@ namespace femus {
 // ==================================================================
 /// Constructor
  
- TimeLoop::TimeLoop(Files& files_in):
+ TimeLoop::TimeLoop(Files& files_in, const FemusInputParser<double> & map_in):
  _files(files_in),
- _timemap("TimeLoop",_files._output_path)   {
+ _timemap(map_in)   {
 
- //inizialize to zero   
+ //inizialize   
    _t_idx_in  = 0;  
     _time_in  = 0.;  
  _t_idx_final = 0;
@@ -50,73 +62,6 @@ namespace femus {
   _curr_time  = 0.;
    
 }
-
-
-
-// =================================================================
-/// Xdmf transient  print
-//print from time t_idx_in to t_idx_final
-//I will print a separate time sequence for each LEVEL
-//TODO see if there is a way to read multiple sol collections, defined on different grids, in the SAME time file
-      void TimeLoop::transient_print_xmf(const uint t_idx_in,const uint t_idx_final, const uint nolevels_in) const {
-
-	//multigrid
-	uint NoLevels = nolevels_in;
-
-        // time parameters
-        const uint ndigits     = DEFAULT_NDIGITS;
-        const int print_step   = _timemap.get("printstep");
-        // dir names
-        std::string    basetime     = DEFAULT_BASETIME;
-        std::string    ext_xdmf     = DEFAULT_EXT_XDMF;
-        std::string    basesol      = DEFAULT_BASESOL;
-        std::string    aux_xdmf     = DEFAULT_AUX_XDMF;
-
-// =================================
-// ============= LEVELS ============
-// =================================
-	
-	for (uint l=0; l < NoLevels; l++) {
-
-	// file 
-        std::ostringstream Name;
-        Name << _files._output_path << "/" << basetime << "."
-             << std::setw(ndigits) << std::setfill('0') << t_idx_in << "-"
-             << std::setw(ndigits) << std::setfill('0') << t_idx_final  << "_l" << l
-             << ext_xdmf;
-        std::ofstream out(Name.str().c_str());
-	if (out.fail()) {std::cout << "transient_print_xmf: cannot print timeN.xmf" << std::endl; abort();}
-	
-        uint nprt=1;
-        std::string gname[3];  gname[0]=basesol;
-
-        //   Mesh -----------------------------------
-        out << "<?xml version=\"1.0\" ?> \n";
-        out << "<!DOCTYPE Xdmf SYSTEM "
-        <<  "\"" << _files._output_path << "/" << aux_xdmf << "\"" << "[]>\n";
-        out << "<Xdmf xmlns:xi=\"http://www.w3.org/2001/XInclude\" Version=\"2.2\"> \n";
-        out << "<Domain> \n";
-        for (uint kp=0;kp< nprt; kp++)    {
-          out << "<Grid Name=\""<< gname[kp].c_str() <<"\"  GridType=\"Collection\" CollectionType=\"Temporal\"> \n";
-          // time loop for grid sequence
-          for (uint it = t_idx_in; it <= t_idx_final; it++) if (it%print_step ==0)   {
-              out << "<xi:include href=\""
-                  << basesol << "." << std::setw(ndigits) << std::setfill('0') << it << "_l" << l <<  ext_xdmf 
-                  << "\"" << " xpointer=\"xpointer(//Xdmf/Domain/Grid["<< kp+1 <<"])\" >\n";
-              out << "<xi:fallback />\n";
-              out << " </xi:include>\n";
-            }
-          out << "</Grid> \n";
-        }
-        // Grid Collection end
-        out << "</Domain> \n";
-        out << "</Xdmf> \n";
-        out.close();
-	
-	} //end levels
-	
-      return;
-    }
 
     
 // ======================================================
@@ -156,22 +101,19 @@ namespace femus {
 
 double TimeLoop::MGTimeStep(const uint iter, SystemTwo * eqn_in) const {
 
-    std::cout  << std::endl << " Solving " << eqn_in->_eqname << " , step " << iter << std::endl;
+    std::cout  << std::endl << " Solving " << eqn_in->name() << " , step " << iter << std::endl;
 
     ///A0) Put x_old into x_oold
-    *(eqn_in->_x_oold[eqn_in->_NoLevels-1]) = *(eqn_in->_x_old[eqn_in->_NoLevels-1]);
+    *(eqn_in->_x_oold[eqn_in->GetGridn()-1]) = *(eqn_in->_x_old[eqn_in->GetGridn()-1]);
 
     /// A) Assemblying 
 #if  DEFAULT_PRINT_TIME==1
     std::clock_t start_time=std::clock();
 #endif
 
-    for (uint Level = 0 ; Level < eqn_in->_NoLevels; Level++) {
+    for (uint Level = 0 ; Level < eqn_in->GetGridn(); Level++) {
 
-        eqn_in->_A[Level]->zero();
-        eqn_in->_b[Level]->zero();
-
-        eqn_in->GenMatRhs(Level);
+        eqn_in-> GetAssembleFunction()(eqn_in->GetMLProb(),Level,0,true);
 
 #ifdef DEFAULT_PRINT_INFO
         eqn_in->_A[Level]->close();
@@ -194,22 +136,14 @@ double TimeLoop::MGTimeStep(const uint iter, SystemTwo * eqn_in) const {
 // and they do not depend on  time (because no adaptive refinement is performed)
 // They only depend on the nodes (dofs!)
 
-/// C) Reinitialization of  the ILU (if ILUINIT defined),
-// #ifdef ILUINIT
-//   if (iter%ILUINIT==0) {
-//     std::cout << " ILU Reinitialized: " << std::endl;
-//     for (int Level = NoLevels - 1; Level > 0; Level--) *L[Level].ILUExists = _LPFalse;
-//   }
-// #endif
-
-    /// D) Solution of the linear MGsystem
+/// D) Solution of the linear MGsystem
 #ifdef DEFAULT_PRINT_TIME
         std::clock_t start_time_sol = std::clock();
 #endif
       
         eqn_in->MGSolve(DEFAULT_EPS_LSOLV, DEFAULT_MAXITS_LSOLV);
 	
-// //     for (uint Level = 0 ; Level < _NoLevels; Level++)  { 
+// //     for (uint Level = 0 ; Level < GetGridn(); Level++)  { 
 // //       _solver[Level]->solve(*_A[Level],*_x[Level],*_b[Level],1.e-6,40);
 // //            _x[Level]->localize(*_x_old[Level]);   // x_old = x
 // //     }
@@ -224,24 +158,24 @@ double TimeLoop::MGTimeStep(const uint iter, SystemTwo * eqn_in) const {
 /// std::cout << "$$$$$$$$$ Computed the x with the MG method $$$$$$$" << std::endl;
 
     /// E) Update of the old solution at the top Level
-    eqn_in->_x[eqn_in->_NoLevels-1]->localize(*(eqn_in->_x_old[eqn_in->_NoLevels-1]));   // x_old = x
+    eqn_in->_x[eqn_in->GetGridn()-1]->localize(*(eqn_in->_x_old[eqn_in->GetGridn()-1]));   // x_old = x
 #ifdef DEFAULT_PRINT_INFO
     std::cout << "$$$$$$$$$ Updated the x_old solution $$$$$$$$$" << std::endl;
 #endif
 /// std::cout << "$$$$$$$$$ Check the convergence $$$$$$$" << std::endl;
 
-    eqn_in->_x_tmp[eqn_in->_NoLevels-1]->zero();
-    eqn_in->_x_tmp[eqn_in->_NoLevels-1]->add(+1.,*(eqn_in->_x_oold[eqn_in->_NoLevels-1]));
-    eqn_in->_x_tmp[eqn_in->_NoLevels-1]->add(-1.,*(eqn_in->_x_old[eqn_in->_NoLevels-1]));
+    eqn_in->_x_tmp[eqn_in->GetGridn()-1]->zero();
+    eqn_in->_x_tmp[eqn_in->GetGridn()-1]->add(+1.,*(eqn_in->_x_oold[eqn_in->GetGridn()-1]));
+    eqn_in->_x_tmp[eqn_in->GetGridn()-1]->add(-1.,*(eqn_in->_x_old[eqn_in->GetGridn()-1]));
     // x_oold -x_old =actually= (x_old - x)
     //(x must not be touched, as you print from it)
     //x_oold must not be touched ! Because it's used later for UPDATING Becont!
     //so you must create a temporary vector necessarily.
 
-    eqn_in->_x_tmp[eqn_in->_NoLevels-1]->close();
-    double deltax_norm = eqn_in->_x_tmp[eqn_in->_NoLevels-1]->l2_norm();
-    std::cout << " $$$$$$ " << eqn_in->_eqname << " error l2 " << deltax_norm << std::endl;
-    std::cout << " $$$$$$ " << eqn_in->_eqname << " error linfty " << eqn_in->_x_tmp[eqn_in->_NoLevels-1]->linfty_norm() << std::endl;
+    eqn_in->_x_tmp[eqn_in->GetGridn()-1]->close();
+    double deltax_norm = eqn_in->_x_tmp[eqn_in->GetGridn()-1]->l2_norm();
+    std::cout << " $$$$$$ " << eqn_in->name() << " error l2 " << deltax_norm << std::endl;
+    std::cout << " $$$$$$ " << eqn_in->name() << " error linfty " << eqn_in->_x_tmp[eqn_in->GetGridn()-1]->linfty_norm() << std::endl;
 //AAA when the vectors have nan's, the norm becomes zero!
 //when the residual norm in pre and post smoothing is too big,
 //then it doesnt do any iterations, the solver doesnt solve anymore, so the solution remains frozen
@@ -254,10 +188,10 @@ double TimeLoop::MGTimeStep(const uint iter, SystemTwo * eqn_in) const {
 /// This function performes all the Physics time step routines
 void TimeLoop::OneTimestepEqnLoop(
     const uint delta_t_step_in,     // integer time
-    const MultiLevelProblemTwo & eqnmap) const {
+    const MultiLevelProblem & eqnmap) const {
     // loop for time steps
-    for (MultiLevelProblemTwo::const_iterator eqn = eqnmap.begin(); eqn != eqnmap.end(); eqn++)  {
-        SystemTwo* equation = eqn->second;
+    for (MultiLevelProblem::const_system_iterator eqn = eqnmap.begin(); eqn != eqnmap.end(); eqn++)  {
+        SystemTwo* equation = static_cast<SystemTwo*>(eqn->second);
         MGTimeStep(delta_t_step_in,equation);
     }
     return;
@@ -267,7 +201,7 @@ void TimeLoop::OneTimestepEqnLoop(
 ////////////////////////////////
 ////////////////////////////////
 
-void TimeLoop::TransientSetup(const MultiLevelProblemTwo & eqnmap)  {
+void TimeLoop::TransientSetup(const MultiLevelProblem & eqnmap)  {
 
     const uint initial_step = _timemap.get("initial_step");
     const uint ndigits      = DEFAULT_NDIGITS;
@@ -281,7 +215,6 @@ void TimeLoop::TransientSetup(const MultiLevelProblemTwo & eqnmap)  {
     std::string    basemesh = DEFAULT_BASEMESH;
 
     std::string  aux_xdmf   = DEFAULT_AUX_XDMF;
-    std::string  connlin    = DEFAULT_CONNLIN;
 
 
 //now, every run, restart or not, has a new output dir.
@@ -307,7 +240,7 @@ void TimeLoop::TransientSetup(const MultiLevelProblemTwo & eqnmap)  {
 //We will distinguish them later.
 
     //------initial data
-    if (_files._restart_flag) {
+    if (_files.GetRestartFlag()) {
         _t_idx_in  = initial_step;
         std::cout << "We wish to restart from time step " << _t_idx_in << std::endl;
         std::cout << "\n *+*+* TimeLoop::transient_setup: RESTART  " << std::endl;
@@ -315,28 +248,28 @@ void TimeLoop::TransientSetup(const MultiLevelProblemTwo & eqnmap)  {
 
         if (paral::get_rank() == 0) {
 
-            stringstream tidxin;
-            tidxin << setw(ndigits) << setfill('0') << _t_idx_in;
-            std::cout << " Restarting from run: " << _files._input_path << std::endl;
+            std::stringstream tidxin;
+            tidxin << std::setw(ndigits) << std::setfill('0') << _t_idx_in;
+            std::cout << " Restarting from run: " << _files.GetInputPath() << std::endl;
 	    std::ostringstream cp_src_xmf_stream;
-	    cp_src_xmf_stream << _files._input_path << "/" << basesol << "." << tidxin.str() << "_l" << (eqnmap._mesh._NoLevels - 1) << ext_xdmf;
+	    cp_src_xmf_stream << _files.GetInputPath() << "/" << basesol << "." << tidxin.str() << "_l" << (eqnmap.GetMeshTwo()._NoLevels - 1) << ext_xdmf;
             std::string cp_src_xmf = cp_src_xmf_stream.str();
-            fstream file_cp_xmf(cp_src_xmf.c_str());
+            std::fstream file_cp_xmf(cp_src_xmf.c_str());
             if (!file_cp_xmf.is_open()) {
                 std::cout << "No xmf file" << std::endl;
                 abort();
             }
 
 	    std::ostringstream cp_src_h5_stream;
-	    cp_src_h5_stream << _files._input_path << "/" << basesol << "." << tidxin.str() /*<< "_l" << (_mesh._NoLevels - 1)*/ << ext_h5;
+	    cp_src_h5_stream << _files.GetInputPath() << "/" << basesol << "." << tidxin.str() /*<< "_l" << (_mesh._NoLevels - 1)*/ << ext_h5;
             std::string cp_src_h5 = cp_src_h5_stream.str();
-            fstream file_cp_h5(cp_src_h5.c_str());
+            std::fstream file_cp_h5(cp_src_h5.c_str());
             if (!file_cp_h5.is_open()) {
                 std::cout << "No h5 file" << std::endl;
                 abort();
             }
 
-            std::string cp_dest_dir = _files._output_path;
+            std::string cp_dest_dir = _files.GetOutputPath();
 
             std::string cp_cmd_xmf = "cp " + cp_src_xmf  + " " +  cp_dest_dir;
             std::string cp_cmd_h5  = "cp " + cp_src_h5   + " " +  cp_dest_dir;
@@ -374,7 +307,7 @@ void TimeLoop::TransientSetup(const MultiLevelProblemTwo & eqnmap)  {
 //some parts of them are good for a SPECIFIC NOLEVELS or a SPECIFIC NO_PROCESSORS
 //while others, IN PARTICULAR THOSE THAT ARE NECESSARY FOR RESTART, must be INDEPENDENT OF THAT.
 
-        eqnmap.ReadSol(_t_idx_in,_time_in); //read  sol.N.h5 and sol.N.xmf
+        XDMFWriter::ReadSol(_files.GetOutputPath(),_t_idx_in,_time_in,eqnmap); //read  sol.N.h5 and sol.N.xmf
         //AAA: here _t_idx_in is intent in, _time_in is intent out
         //reading files can be done in parallel with no problems
         //well, not really... reading can be done if you are sure that the file is there at the moment you call to read it
@@ -388,7 +321,7 @@ void TimeLoop::TransientSetup(const MultiLevelProblemTwo & eqnmap)  {
         _t_idx_in = 0;                            //time step index
         _time_in = 0.;                           //time absolute value
 
-        eqnmap.PrintSol(_t_idx_in,_time_in);  //print sol.0.h5 and sol.0.xmf
+        XDMFWriter::PrintSolLinear(_files.GetOutputPath(),_t_idx_in,_time_in,eqnmap);  //print sol.0.h5 and sol.0.xmf
         //AAA: here _t_idx_in is intent-in, and also _time_in is intent-in
     }
 
@@ -414,8 +347,8 @@ void TimeLoop::TransientSetup(const MultiLevelProblemTwo & eqnmap)  {
 //------- print
     //this happens when the output dir is already set
     //at this point this is already true
-    eqnmap.PrintCase(_t_idx_in);       //print caseN.xmf&h5 = IC + BC flags
-    transient_print_xmf(_t_idx_in,_t_idx_final,eqnmap._mesh._NoLevels); //print timeN.xmf
+    XDMFWriter::PrintCaseLinear(_files.GetOutputPath(),_t_idx_in,eqnmap);       //print caseN.xmf&h5 = IC + BC flags
+    XDMFWriter::transient_print_xmf(_files.GetOutputPath(),_t_idx_in,_t_idx_final,_timemap.get("printstep"),eqnmap.GetMeshTwo()._NoLevels); //print timeN.xmf
 
     return;
 }
@@ -425,7 +358,7 @@ void TimeLoop::TransientSetup(const MultiLevelProblemTwo & eqnmap)  {
 ///////////////////////////////////////////////////////
 /*standard time loop over the map equations.
  The equations are solved in alphabetical order given by the map*/
-void TimeLoop::TransientLoop(const MultiLevelProblemTwo & eqnmap)  {
+void TimeLoop::TransientLoop(const MultiLevelProblem & eqnmap)  {
 
     //  parameters
     double         dt = _timemap.get("dt");
@@ -457,7 +390,7 @@ void TimeLoop::TransientLoop(const MultiLevelProblemTwo & eqnmap)  {
 #endif  // ------------------------------------------
 
         // print solution
-        if (delta_t_step%print_step == 0) eqnmap.PrintSol(curr_step,curr_time);   //print sol.N.h5 and sol.N.xmf
+        if (delta_t_step%print_step == 0) XDMFWriter::PrintSolLinear(_files.GetOutputPath(),curr_step,curr_time,eqnmap);   //print sol.N.h5 and sol.N.xmf
 
 
 #if DEFAULT_PRINT_TIME==1 // only for cpu time check --------

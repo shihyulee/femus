@@ -6,7 +6,7 @@
 
 #include "CurrentQuantity.hpp"
 #include "ElemType.hpp"
-
+#include "MultiLevelProblem.hpp"
 
 namespace femus {
 
@@ -96,39 +96,39 @@ inline void extend_nds(const uint el_ndofs,const double* a_nds, double* a_nds3D,
 
 //=================================================================
 
-inline double FunctionIntegral (const uint vb, MultiLevelProblemTwo & eqnmap_in, double (*pt2func)(double, const std::vector<double> ) )  {
+inline double FunctionIntegral (const uint vb, MultiLevelProblem & eqnmap_in, double (*pt2func)(double, const std::vector<double> ) )  {
 
   const uint mesh_vb = vb;
   
-const uint Level  = eqnmap_in._mesh._NoLevels - 1;
-const uint myproc = eqnmap_in._mesh._iproc;
+const uint Level  = eqnmap_in.GetMeshTwo()._NoLevels - 1;
+const uint myproc = eqnmap_in.GetMeshTwo()._iproc;
   double time = 0.;
   
-    CurrentElem       currelem(vb,NULL,eqnmap_in._mesh,eqnmap_in._elem_type); //element without equation
-    CurrentGaussPointBase & currgp = CurrentGaussPointBase::build(currelem,eqnmap_in, eqnmap_in._mesh.get_dim());
+    CurrentElem       currelem(Level,vb,NULL,eqnmap_in.GetMeshTwo(),eqnmap_in.GetElemType()); //element without equation
+    CurrentGaussPointBase & currgp = CurrentGaussPointBase::build(currelem,eqnmap_in.GetQrule(currelem.GetDim()));
 
   //======== ELEMENT MAPPING =======
-  const uint meshql = (int) eqnmap_in._mesh.GetRuntimeMap().get("meshql");  
+  const uint meshql = (int) eqnmap_in.GetMeshTwo().GetRuntimeMap().get("meshql");  
  
 //========= DOMAIN MAPPING
     CurrentQuantity xyz(currgp);
-    xyz._dim      = eqnmap_in._mesh.get_dim();
+    xyz._dim      = eqnmap_in.GetMeshTwo().get_dim();
     xyz._FEord    = meshql;
-    xyz._ndof     = eqnmap_in._elem_type[currelem.GetDim()-1][xyz._FEord]->GetNDofs();
+    xyz._ndof     = currelem.GetElemType(xyz._FEord)->GetNDofs();
     xyz.Allocate();
 
   double integral = 0.;
   
 //loop over the geom el types
-      const uint el_ngauss = eqnmap_in._qrule[currelem.GetDim()-1].GetGaussPointsNumber();
+      const uint el_ngauss = eqnmap_in.GetQrule(currelem.GetDim()).GetGaussPointsNumber();
 
 //parallel sum
-    const uint nel_e = eqnmap_in._mesh._off_el[mesh_vb][eqnmap_in._mesh._NoLevels*myproc+Level+1];
-    const uint nel_b = eqnmap_in._mesh._off_el[mesh_vb][eqnmap_in._mesh._NoLevels*myproc+Level];
+    const uint nel_e = eqnmap_in.GetMeshTwo()._off_el[mesh_vb][eqnmap_in.GetMeshTwo()._NoLevels*myproc+Level+1];
+    const uint nel_b = eqnmap_in.GetMeshTwo()._off_el[mesh_vb][eqnmap_in.GetMeshTwo()._NoLevels*myproc+Level];
   
     for (uint iel=0; iel < (nel_e - nel_b); iel++) {
   
-    currelem.set_el_nod_conn_lev_subd(Level,myproc,iel);
+    currelem.SetDofobjConnCoords(myproc,iel);
     currelem.SetMidpoint(); 
     
     currelem.ConvertElemCoordsToMappingOrd(xyz);
@@ -142,7 +142,7 @@ double  Jac_g=0.;
           if (vb==0)   Jac_g = currgp.JacVectVV_g(xyz);  //not xyz_refbox!      
      else if (vb==1)   Jac_g = currgp.JacVectBB_g(xyz);  //not xyz_refbox!      
 
-   const double  wgt_g = eqnmap_in._qrule[currelem.GetDim()-1].GetGaussWeight(qp);
+   const double  wgt_g = eqnmap_in.GetQrule(currelem.GetDim()).GetGaussWeight(qp);
 
      for (uint fe = 0; fe < QL; fe++)     {          currgp.SetPhiElDofsFEVB_g (fe,qp);  }
 
@@ -160,7 +160,7 @@ double myval_g = pt2func(time,xyz._val_g);
          std::cout << std::endl  << " ^^^^^^^^^^^^^^^^^L'integrale sul processore "<< myproc << " vale: " << integral << std::endl;
 
     double weights_sum = 0.;
-    for (uint qp = 0; qp < el_ngauss; qp++)  weights_sum += eqnmap_in._qrule[currelem.GetDim()-1].GetGaussWeight(qp);
+    for (uint qp = 0; qp < el_ngauss; qp++)  weights_sum += eqnmap_in.GetQrule(currelem.GetDim()).GetGaussWeight(qp);
        std::cout << std::endl << " ^^^^^^^^^^^^^^^^^ La somma dei pesi  vale: " << weights_sum << std::endl;
 
        double J=0.;

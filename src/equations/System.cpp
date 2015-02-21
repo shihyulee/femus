@@ -2,7 +2,7 @@
 
  Program: FEMUS
  Module: System
- Authors: Simone Bnà
+ Authors: Simone Bnà, Giorgio Bornia
  
  Copyright (c) FEMTTU
  All rights reserved. 
@@ -14,7 +14,7 @@
 =========================================================================*/
 
 #include "System.hpp"
-
+#include "MultiLevelMeshTwo.hpp"
 
 namespace femus {
 
@@ -37,7 +37,7 @@ namespace femus {
     _solution[i]=_ml_sol->GetSolutionLevel(i);
   }
 }
-  
+
   
 System::~System() {
   this->clear();
@@ -51,8 +51,12 @@ void System::init() {
   
 }
 
-void System::AttachAssembleFunction(void fptr(MultiLevelProblem &ml_prob, unsigned level, 
-				      const unsigned &gridn, const bool &assembe_matrix))
+   System::AssembleFunctionType  System::GetAssembleFunction() {
+  return _assemble_system_function;
+}
+
+void System::SetAssembleFunction(void fptr(MultiLevelProblem &ml_prob, unsigned level, 
+				      const unsigned &gridn, const bool &assemble_matrix))
 {
   assert(fptr);
 
@@ -60,7 +64,7 @@ void System::AttachAssembleFunction(void fptr(MultiLevelProblem &ml_prob, unsign
 }
   
 
-void System::AddSolutionToSytemPDE(const char solname[]){
+void System::AddSolutionToSystemPDE(const char solname[]){
   unsigned jsol=0;
   for(unsigned j=0;j<_SolSystemPdeIndex.size();j++){
     if(strcmp(_ml_sol->GetSolutionName(_SolSystemPdeIndex[j]),solname)) jsol++;

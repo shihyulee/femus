@@ -19,26 +19,30 @@ PURPOSE.  See the above copyright notice for more information.
 //----------------------------------------------------------------------------
 // includes :
 //----------------------------------------------------------------------------
+#include <vector>
+#include <memory>
 #include "MultiLevelMesh.hpp"
 #include "Solution.hpp"
 #include "ParallelObject.hpp"
 #include "FElemTypeEnum.hpp"
 #include "BDCTypeEnum.hpp"
 #include "FunctionBase.hpp"
-#include <vector>
-
+#include "Writer.hpp"
 
 namespace femus {
 
 
 
-typedef double (*initfunc) (const double &x, const double &y, const double &z);
 
 /**
  * This class is a black box container to handle multilevel solutions.
  */
 
 class MultiLevelSolution : public ParallelObject {
+
+private:
+  
+    typedef double (*initfunc) (const double &x, const double &y, const double &z);
 
 public:
 
@@ -166,6 +170,15 @@ public:
 
     bool _Use_GenerateBdc_new;
     
+    /** To be Added */
+    Writer* GetWriter() {return _writer; }
+
+    /** To be Added */
+    const Writer* GetWriter() const {return _writer; }
+
+    /** To be Added */
+    void SetWriter(const WriterEnum format) { _writer = Writer::build(format,this).release(); }
+
 private:
   
     /** To be Added */
@@ -177,16 +190,16 @@ private:
     /** To be Added */
     FunctionBase* GetBdcFunction(const unsigned int var, const unsigned int facename) const;
 
-    /** Array of solution */
+    /** Array of solution, dimension number of levels */
     vector <Solution*>  _solution;
     
+    /** This group of vectors has the size of the number of added solutions */
     vector< vector <BDCType> > _boundaryconditions;
     vector< vector <bool> > _ishomogeneous;
     vector< vector <FunctionBase *> > _nonhomogeneousbcfunction; 
-
-    
     
     bool _bdc_func_set;
+    
     unsigned short  _gridn;
     vector <int>    _SolType;
     vector <FEFamily> _family;
@@ -197,7 +210,9 @@ private:
     vector <bool>   _PdeType;
     vector <bool>   _TestIfPressure;
     vector <bool>   _TestIfDisplacement;
-
+    
+    /** Multilevel solution writer */
+    Writer* _writer;
 
 };
 

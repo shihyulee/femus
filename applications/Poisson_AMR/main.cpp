@@ -15,7 +15,8 @@
 #include <json/json.h>
 #include <json/value.h>
 #include "ParsedFunction.hpp"
-#include <stdlib.h>
+#include "Files.hpp"
+#include <cstdlib>
 
 
 using std::cout;
@@ -24,7 +25,7 @@ using std::endl;
 using namespace femus;
 
 
-void AssemblePoissonMatrixandRhs(MultiLevelProblem &ml_prob, unsigned level, const unsigned &gridn, const bool &assembe_matrix);
+void AssemblePoissonMatrixandRhs(MultiLevelProblem &ml_prob, unsigned level, const unsigned &gridn, const bool &assemble_matrix);
 
 
 // double InitVariableU(const double &x, const double &y, const double &z);
@@ -59,7 +60,7 @@ readInputTestFile( const char *path )
 static void show_usage()
 {
     std::cout << "Use --inputfile variable to set the input file" << endl;
-    std::cout << "e.g.: ./Poisson_AMR --inputfile $FEMUS_DIR/applications/Poisson_AMR/input/input.json" << std::endl;
+    std::cout << "e.g.: ./Poisson_AMR --inputfile ./input/input.json" << std::endl;
 }
 
 ParsedFunction fpsource;
@@ -298,6 +299,10 @@ int main(int argc,char **argv) {
     /// Init Petsc-MPI communicator
     FemusInit mpinit(argc,argv,MPI_COMM_WORLD);
 
+    Files files; 
+          files.CheckIODirectories();
+          files.RedirectCout();
+
     /// INIT MESH =================================
 
     unsigned short nm,nr;
@@ -360,7 +365,7 @@ int main(int argc,char **argv) {
    // ml_sol.AddSolutionLevel();
     
 
-    MultiLevelProblem ml_prob(&ml_msh,&ml_sol);
+    MultiLevelProblem ml_prob(&ml_sol);
     
     
 //     ml_prob.parameters.set<func>("func_source") = fpsource;
@@ -373,10 +378,10 @@ int main(int argc,char **argv) {
     std::cout << " PDE problem to solve: Poisson " << std::endl;
 
     LinearImplicitSystem & system2 = ml_prob.add_system<LinearImplicitSystem>("Poisson");
-    system2.AddSolutionToSytemPDE("Sol");
+    system2.AddSolutionToSystemPDE("Sol");
 
     // Set MG Options
-    system2.AttachAssembleFunction(AssemblePoissonMatrixandRhs);
+    system2.SetAssembleFunction(AssemblePoissonMatrixandRhs);
     system2.SetMaxNumberOfLinearIterations(max_number_linear_iteration);
     system2.SetAbsoluteConvergenceTolerance(abs_conv_tol);
     system2.SetMgType(mgtype);
@@ -417,10 +422,10 @@ int main(int argc,char **argv) {
     print_vars.push_back("Sol");
 
     VTKWriter vtkio(ml_sol);
-    vtkio.write_system_solutions("biquadratic",print_vars);
+    vtkio.write_system_solutions(files.GetOutputPath(),"biquadratic",print_vars);
 
     GMVWriter gmvio(ml_sol);
-    gmvio.write_system_solutions("biquadratic",print_vars);
+    gmvio.write_system_solutions(files.GetOutputPath(),"biquadratic",print_vars);
 
   // 
   //     XDMFWriter xdmfio(ml_sol);
@@ -534,7 +539,7 @@ bool SetRefinementFlag(const double &x, const double &y, const double &z, const 
 
 
 //------------------------------------------------------------------------------------------------------------
-void AssemblePoissonMatrixandRhs(MultiLevelProblem &ml_prob, unsigned level, const unsigned &gridn, const bool &assembe_matrix) {
+void AssemblePoissonMatrixandRhs(MultiLevelProblem &ml_prob, unsigned level, const unsigned &gridn, const bool &assemble_matrix) {
 
     //pointers and references
     Solution*      mysolution	       = ml_prob._ml_sol->GetSolutionLevel(level);
@@ -591,7 +596,7 @@ void AssemblePoissonMatrixandRhs(MultiLevelProblem &ml_prob, unsigned level, con
     B.reserve(max_size*max_size);
 
     // Set to zeto all the entries of the Global Matrix
-    if(assembe_matrix) 
+    if(assemble_matrix) 
       myKK->zero();
 
     // *** element loop ***
@@ -614,7 +619,7 @@ void AssemblePoissonMatrixandRhs(MultiLevelProblem &ml_prob, unsigned level, con
         // set to zero all the entries of the FE matrices
         F.resize(nve);
         memset(&F[0],0,nve*sizeof(double));
-        if(assembe_matrix) {
+        if(assemble_matrix) {
             B.resize(nve*nve);
             memset(&B[0],0,nve*nve*sizeof(double));
         }
@@ -672,7 +677,7 @@ void AssemblePoissonMatrixandRhs(MultiLevelProblem &ml_prob, unsigned level, con
                     F[i]+= (-Lap_rhs + src_term*phi[i] )*weight;
 		    
                     //END RESIDUALS A block ===========================
-                    if(assembe_matrix) {
+                    if(assemble_matrix) {
                         // *** phi_j loop ***
                         for(unsigned j=0; j<nve; j++) {
                             double Lap=0;
@@ -684,7 +689,7 @@ void AssemblePoissonMatrixandRhs(MultiLevelProblem &ml_prob, unsigned level, con
                             B[i*nve+j] += Lap;
                         } // end phij loop
                     } // end phii loop
-                } // endif assembe_matrix
+                } // endif assemble_matrix
             } // end gauss point loop
 
             //number of faces for each type of element
@@ -755,11 +760,11 @@ void AssemblePoissonMatrixandRhs(MultiLevelProblem &ml_prob, unsigned level, con
         //Sum the local matrices/vectors into the global Matrix/vector
 
         myRES->add_vector_blocked(F,KK_dof);
-        if(assembe_matrix) myKK->add_matrix_blocked(B,KK_dof,KK_dof);
+        if(assemble_matrix) myKK->add_matrix_blocked(B,KK_dof,KK_dof);
     } //end list of elements loop for each subdomain
 
     myRES->close();
-    if(assembe_matrix) myKK->close();
+    if(assemble_matrix) myKK->close();
 
     // ***************** END ASSEMBLY *******************
 
