@@ -18,10 +18,10 @@
           "model" : "Newtonian" 
         },
         "solid" : {
-          "density" : 1000.0,
-          "young_module" : 1400000,
+          "density" : 800.0,
+          "young_module" : 140000000,
           "poisson_coefficient" : 0.5,        
-          "model" : "Mooney-Rivlin-MassPenalty"
+          "model" : "Mooney-Rivlin"
         }
       },
       "multilevel_mesh" : {
