@@ -324,10 +324,6 @@ void MultiLevelSolution::SetBoundaryCondition_new(const std::string name, const 
   _ishomogeneous[ivar][iface]            = ishomogeneous;
   _nonhomogeneousbcfunction[ivar][iface] = func;
   
-  double xyzt[4] = {0.,0.00005,0.,0.};
-  double a = (*func)(xyzt);
-  double b = 1.;
-   
 }
 
 

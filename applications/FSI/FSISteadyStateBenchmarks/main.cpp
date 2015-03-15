@@ -15,10 +15,9 @@
 using namespace std;
 using namespace femus;
 
-void AssembleMatrixResFSI(MultiLevelProblem &ml_prob, unsigned level, const unsigned &gridn, const bool &assemble_matrix);
 
-bool SetBoundaryConditionTurek(const double &x, const double &y, const double &z,const char name[], 
-		double &value, const int FaceName, const double = 0.);
+// bool SetBoundaryConditionTurek(const double &x, const double &y, const double &z,const char name[], 
+// 		double &value, const int FaceName, const double = 0.);
 bool SetBoundaryConditionDrum(const double &x, const double &y, const double &z,const char name[], 
 		double &value, const int FaceName, const double = 0.);
 bool SetBoundaryConditionBatheCylinder(const double &x, const double &y, const double &z,const char name[], 
@@ -26,16 +25,16 @@ bool SetBoundaryConditionBatheCylinder(const double &x, const double &y, const d
 
 bool SetBoundaryConditionBatheShell(const double &x, const double &y, const double &z,const char name[], 
 				       double &value, const int facename, const double time);
-bool SetBoundaryConditionComsol(const double &x, const double &y, const double &z,const char name[], 
-		double &value, const int FaceName, const double = 0.);
+// bool SetBoundaryConditionComsol(const double &x, const double &y, const double &z,const char name[], 
+// 		double &value, const int FaceName, const double = 0.);
 
- 
+
 bool SetRefinementFlag(const double &x, const double &y, const double &z, const int &ElemGroupNumber,const int &level);
 
 void show_usage()
 {
   std::cout << "Use --inputfile variable to set the input file" << std::endl;
-  std::cout << "e.g.: ./Poisson --inputfile $FEMUS_DIR/applications/Poisson/input/input.json" << std::endl;
+  std::cout << "e.g.: ./execname --inputfile $FEMUS_DIR/applications/FSIApp/input/input.json" << std::endl;
 }
 
 //------------------------------------------------------------------------------------------------------------------
@@ -82,7 +81,7 @@ int main(int argc, char *argv[]) {
   // input parser pointer
   std::auto_ptr<InputParser> inputparser = InputParser::build(path);
   
-  unsigned simulation = 0;
+//   unsigned simulation = 0;
   // mesh ----------------------------------------
   double Lref, Uref;
   Lref = 1.; Uref = 1.;
@@ -106,28 +105,28 @@ int main(int argc, char *argv[]) {
     std::string filename = inputparser->getValue("multilevel_mesh.first.type.filename", "./input/input.neu"); 
     ml_msh.ReadCoarseMesh(filename.c_str(),"fifth",Lref);
     
-    // it should be used until boundary condition will be red from file
-    if(filename.compare("input/turek.neu") == 0){
-      simulation = 1;
-    }
-    else if(filename.compare("input/beam.neu") == 0){
-      simulation = 2;
-    }  
-    else if(filename.compare("input/drum.neu") == 0){
-      simulation = 3;
-    }  
-    else if(filename.compare("input/bathe_FSI.neu") == 0) {
-      simulation = 4;
-    }
-    else if(filename.compare("input/bathe_shell.neu") == 0){
-      simulation = 5;
-    }
-    else if(filename.compare("input/bathe_cylinder.neu") == 0){
-      simulation = 6;
-    }
-    else if(filename.compare("input/comsolbenchmark.neu") == 0){
-      simulation = 7;
-    }
+//     // it should be used until boundary condition will be red from file
+//     if(filename.compare("input/turek.neu") == 0){
+//       simulation = 1;
+//     }
+//     else if(filename.compare("input/beam.neu") == 0){
+//       simulation = 2;
+//     }  
+//     else if(filename.compare("input/drum.neu") == 0){
+//       simulation = 3;
+//     }  
+//     else if(filename.compare("input/bathe_FSI.neu") == 0) {
+//       simulation = 4;
+//     }
+//     else if(filename.compare("input/bathe_shell.neu") == 0){
+//       simulation = 5;
+//     }
+//     else if(filename.compare("input/bathe_cylinder.neu") == 0){
+//       simulation = 6;
+//     }
+//     else if(filename.compare("input/comsolbenchmark.neu") == 0){
+//       simulation = 7;
+//     }
   }
   else if(inputparser->isTrue("multilevel_mesh.first.type","box"))
   {
@@ -181,26 +180,6 @@ int main(int argc, char *argv[]) {
    //Initialize (update Init(...) function)
    ml_sol.Initialize("All");
   
-//   //Start System Variables
-//   ml_sol.AddSolution("DX",LAGRANGE,SECOND,1);
-//   ml_sol.AddSolution("DY",LAGRANGE,SECOND,1);
-//   if (dimension == 3) 
-//     ml_sol.AddSolution("DZ",LAGRANGE,SECOND,1);
-//   ml_sol.AssociatePropertyToSolution("DX","Displacement"); // Add this line
-//   ml_sol.AssociatePropertyToSolution("DY","Displacement"); // Add this line 
-//   if (dimension == 3) 
-//     ml_sol.AssociatePropertyToSolution("DZ","Displacement"); // Add this line 
-//   ml_sol.AddSolution("U",LAGRANGE,SECOND,1);
-//   ml_sol.AddSolution("V",LAGRANGE,SECOND,1);
-//   if (dimension == 3) 
-//     ml_sol.AddSolution("W",LAGRANGE,SECOND,1);
-//   // Since the Pressure is a Lagrange multiplier it is used as an implicit variable
-//   ml_sol.AddSolution("P",DISCONTINOUS_POLYNOMIAL,FIRST,1);
-//   ml_sol.AssociatePropertyToSolution("P","Pressure"); // Add this line
-// 
-//   //Initialize (update Init(...) function)
-//   ml_sol.Initialize("All");
-
    //Set Boundary (update Dirichlet(...) function)
    // New method
    //Set Boundary (update Dirichlet(...) function)
@@ -219,6 +198,7 @@ int main(int argc, char *argv[]) {
    std::vector<std::string> facenamearray;
    std::vector<ParsedFunction> parsedfunctionarray;
    std::vector<BDCType> bdctypearray;
+   std::vector<bool> ishomogeneous;
 
    // These information must be retrieved from multilevel_mesh
    unsigned int bdcsize = 0;
@@ -239,14 +219,25 @@ int main(int argc, char *argv[]) {
    
        //function
        std::string bdcfuncstr = inputparser->getValueFromArray(ss.str(), index, "bdc_func", "0.");
+       if (bdcfuncstr == "0.") {
+         ishomogeneous.push_back(true);
+       } 
+       else {
+         ishomogeneous.push_back(false);
+       }
        ParsedFunction pfunc(bdcfuncstr, "x,y,z,t");
        parsedfunctionarray.push_back(pfunc);
     }
   }
    
    for(int ivar=0; ivar<numvar; ivar++) {
-     for(unsigned int index2=0; index2<bdcsize; ++index2) {   
-       ml_sol.SetBoundaryCondition_new(varname[ivar],facenamearray[index2+ivar*bdcsize],bdctypearray[index2+ivar*bdcsize],false,&parsedfunctionarray[index2+ivar*bdcsize]);
+     for(unsigned int index2=0; index2<bdcsize; ++index2) {
+       if (ishomogeneous[index2+ivar*bdcsize] == true) {
+         ml_sol.SetBoundaryCondition_new(varname[ivar],facenamearray[index2+ivar*bdcsize],bdctypearray[index2+ivar*bdcsize],false,NULL);
+       }
+       else {
+         ml_sol.SetBoundaryCondition_new(varname[ivar],facenamearray[index2+ivar*bdcsize],bdctypearray[index2+ivar*bdcsize],false,&parsedfunctionarray[index2+ivar*bdcsize]);
+       }
      }
    }
     
@@ -469,126 +460,126 @@ bool SetRefinementFlag(const double &x, const double &y, const double &z, const 
 
 }
 
-//---------------------------------------------------------------------------------------------------------------------
-
-bool SetBoundaryConditionTurek(const double &x, const double &y, const double &z,const char name[], double &value, const int facename, const double time) {
-  bool test=1; //dirichlet
-  value=0.;
-  if(!strcmp(name,"U")) {
-    if(1==facename){   //inflow
-      test=1;
-      double um = 0.2;
-      value=1.5*um*4.0/0.1681*y*(0.41-y);
-    }  
-    else if(2==facename ){  //outflow
-     test=0;
- //    test=1;
-     value=0.;
-    }
-    else if(3==facename ){  // no-slip fluid wall
-      test=1;
-      value=0.;	
-    }
-    else if(4==facename ){  // no-slip solid wall
-      test=1;
-      value=0.;
-    }
-    else if(6==facename ){   // beam case zero stress
-      test=0;
-      value=0.;
-    }
-  }  
-  else if(!strcmp(name,"V")){
-    if(1==facename){            //inflow
-      test=1;
-      value=0.;
-    }  
-    else if(2==facename ){      //outflow
-     test=0;
- //    test=1;
-     value=0.;
-    }
-    else if(3==facename ){      // no-slip fluid wall
-      test=1;
-      value=0;
-    }
-    else if(4==facename ){      // no-slip solid wall
-      test=1;
-      value=0.;
-    }
-    else if(6==facename ){   // beam case zero stress
-      test=0;
-      value=0.;
-    }
-  }
-  else if(!strcmp(name,"P")){
-    if(1==facename){
-      test=0;
-      value=0.;
-    }  
-    else if(2==facename ){  
-      test=0;
-      value=0.;
-    }
-    else if(3==facename ){  
-      test=0;
-      value=0.;
-    }
-    else if(4==facename ){  
-      test=0;
-      value=0.;
-    }
-    else if(6==facename ){   // beam case zero stress
-      test=0;
-      value=0.;
-    }
-  }
-  else if(!strcmp(name,"DX")){
-    if(1==facename){         //inflow
-      test=1;
-      value=0.;
-    }  
-    else if(2==facename ){   //outflow
-     test=1;
-     value=0.;
-    }
-    else if(3==facename ){   // no-slip fluid wall
-      test=0; //0
-      value=0.;	
-    }
-    else if(4==facename ){   // no-slip solid wall
-      test=1;
-      value=0.;
-    }
-    else if(6==facename ){   // beam case zero stress
-      test=0;
-      value=0.;
-    }
-  }
-  else if(!strcmp(name,"DY")){
-    if(1==facename){         //inflow
-      test=0; // 0
-      value=0.;
-    }  
-    else if(2==facename ){   //outflow
-     test=0; // 0
-     value=0.;
-    }
-    else if(3==facename ){   // no-slip fluid wall
-      test=1;
-      value=0.;	
-    }
-    else if(4==facename ){   // no-slip solid wall
-      test=1;
-      value=0.;
-    }
-    else if(6==facename ){   // beam case zero stress
-      test=0;
-      value=0.;
-    }
-  }
-  return test;
-}
+// //---------------------------------------------------------------------------------------------------------------------
+// 
+// bool SetBoundaryConditionTurek(const double &x, const double &y, const double &z,const char name[], double &value, const int facename, const double time) {
+//   bool test=1; //dirichlet
+//   value=0.;
+//   if(!strcmp(name,"U")) {
+//     if(1==facename){   //inflow
+//       test=1;
+//       double um = 0.2;
+//       value=1.5*um*4.0/0.1681*y*(0.41-y);
+//     }  
+//     else if(2==facename ){  //outflow
+//      test=0;
+//  //    test=1;
+//      value=0.;
+//     }
+//     else if(3==facename ){  // no-slip fluid wall
+//       test=1;
+//       value=0.;	
+//     }
+//     else if(4==facename ){  // no-slip solid wall
+//       test=1;
+//       value=0.;
+//     }
+//     else if(6==facename ){   // beam case zero stress
+//       test=0;
+//       value=0.;
+//     }
+//   }  
+//   else if(!strcmp(name,"V")){
+//     if(1==facename){            //inflow
+//       test=1;
+//       value=0.;
+//     }  
+//     else if(2==facename ){      //outflow
+//      test=0;
+//  //    test=1;
+//      value=0.;
+//     }
+//     else if(3==facename ){      // no-slip fluid wall
+//       test=1;
+//       value=0;
+//     }
+//     else if(4==facename ){      // no-slip solid wall
+//       test=1;
+//       value=0.;
+//     }
+//     else if(6==facename ){   // beam case zero stress
+//       test=0;
+//       value=0.;
+//     }
+//   }
+//   else if(!strcmp(name,"P")){
+//     if(1==facename){
+//       test=0;
+//       value=0.;
+//     }  
+//     else if(2==facename ){  
+//       test=0;
+//       value=0.;
+//     }
+//     else if(3==facename ){  
+//       test=0;
+//       value=0.;
+//     }
+//     else if(4==facename ){  
+//       test=0;
+//       value=0.;
+//     }
+//     else if(6==facename ){   // beam case zero stress
+//       test=0;
+//       value=0.;
+//     }
+//   }
+//   else if(!strcmp(name,"DX")){
+//     if(1==facename){         //inflow
+//       test=1;
+//       value=0.;
+//     }  
+//     else if(2==facename ){   //outflow
+//      test=1;
+//      value=0.;
+//     }
+//     else if(3==facename ){   // no-slip fluid wall
+//       test=0; //0
+//       value=0.;	
+//     }
+//     else if(4==facename ){   // no-slip solid wall
+//       test=1;
+//       value=0.;
+//     }
+//     else if(6==facename ){   // beam case zero stress
+//       test=0;
+//       value=0.;
+//     }
+//   }
+//   else if(!strcmp(name,"DY")){
+//     if(1==facename){         //inflow
+//       test=0; // 0
+//       value=0.;
+//     }  
+//     else if(2==facename ){   //outflow
+//      test=0; // 0
+//      value=0.;
+//     }
+//     else if(3==facename ){   // no-slip fluid wall
+//       test=1;
+//       value=0.;	
+//     }
+//     else if(4==facename ){   // no-slip solid wall
+//       test=1;
+//       value=0.;
+//     }
+//     else if(6==facename ){   // beam case zero stress
+//       test=0;
+//       value=0.;
+//     }
+//   }
+//   return test;
+// }
 
 bool SetBoundaryConditionDrum(const double &x, const double &y, const double &z,const char name[], double &value, const int facename, const double time) {
   bool test=1; //dirichlet
@@ -956,152 +947,152 @@ bool SetBoundaryConditionBatheShell(const double &x, const double &y, const doub
 
 //---------------------------------------------------------------------------------------------------------------------
 
-bool SetBoundaryConditionComsol(const double &x, const double &y, const double &z,const char name[], double &value, const int FaceName, const double time) {
-  bool test=1; //Dirichlet
-  value=0.;
-  //   cout << "Time bdc : " <<  time << endl;
-  if (!strcmp(name,"U")) {
-    if (1==FaceName) { //inflow
-      test=1;
-      //comsol Benchmark
-      //value = (0.05*time*time)/(sqrt( (0.04 - time*time)*(0.04 - time*time) + (0.1*time)*(0.1*time) ))*y*(0.0001-y)*4.*100000000;
-      value = 0.05*y*(0.0001-y)*4.*100000000;
-    }
-    else if (2==FaceName ) {  //outflow
-      test=0;
-      //    test=1;
-      value=0.;
-    }
-    else if (3==FaceName ) {  // no-slip fluid wall
-      test=1;
-      value=0.;
-    }
-    else if (4==FaceName ) {  // no-slip solid wall
-      test=1;
-      value=0.;
-    }
-  }
-  else if (!strcmp(name,"V")) {
-    if (1==FaceName) {          //inflow
-      test=1;
-      value=0.;
-    }
-    else if (2==FaceName ) {    //outflow
-      test=0;
-      //    test=1;
-      value=0.;
-    }
-    else if (3==FaceName ) {    // no-slip fluid wall
-      test=1;
-      value=0;
-    }
-    else if (4==FaceName ) {    // no-slip solid wall
-      test=1;
-      value=0.;
-    }
-  }
-  else if (!strcmp(name,"W")) {
-    if (1==FaceName) {
-      test=1;
-      value=0.;
-    }
-    else if (2==FaceName ) {
-      test=1;
-      value=0.;
-    }
-    else if (3==FaceName ) {
-      test=1;
-      value=0.;
-    }
-    else if (4==FaceName ) {
-      test=1;
-      value=0.;
-    }
-  }
-  else if (!strcmp(name,"P")) {
-    if (1==FaceName) {
-      test=0;
-      value=0.;
-    }
-    else if (2==FaceName ) {
-      test=0;
-      value=0.;
-    }
-    else if (3==FaceName ) {
-      test=0;
-      value=0.;
-    }
-    else if (4==FaceName ) {
-      test=0;
-      value=0.;
-    }
-  }
-  else if (!strcmp(name,"DX")) {
-    if (1==FaceName) {       //inflow
-      test=1;
-      value=0.;
-    }
-    else if (2==FaceName ) { //outflow
-      test=1;
-      value=0.;
-    }
-    else if (3==FaceName ) { // no-slip Top fluid wall
-      test=0;
-      value=0;
-    }
-    else if (4==FaceName ) { // no-slip solid wall
-      test=1;
-      value=0.;
-    }
-  }
-  else if (!strcmp(name,"DY")) {
-    if (1==FaceName) {       //inflow
-      test=0;
-      value=0.;
-    }
-    else if (2==FaceName ) { //outflow
-      test=0;
-      value=0.;
-    }
-    else if (3==FaceName ) { // no-slip fluid wall
-      test=1;
-      value=0.;
-    }
-    else if (4==FaceName ) { // no-slip solid wall
-      test=1;
-      value=0.;
-    }
-  }
-  else if (!strcmp(name,"DZ")) {
-    if (1==FaceName) {       //inflow
-      test=1;
-      value=0.;
-    }
-    else if (2==FaceName ) { //outflow
-      test=1;
-      value=0.;
-    }
-    else if (3==FaceName ) { // no-slip fluid wall
-      test=1;
-      value=0.;
-    }
-    else if (4==FaceName ) { // no-slip solid wall
-      test=1;
-      value=0.;
-    }
-  }
-  else if (!strcmp(name,"AX")) {
-    test=0;
-    value=0;
-  }
-  else if (!strcmp(name,"AY")) {
-    test=0;
-    value=0;
-  }
-  else if (!strcmp(name,"AZ")) {
-    test=0;
-    value=0;
-  }
-  return test;
-}
+// bool SetBoundaryConditionComsol(const double &x, const double &y, const double &z,const char name[], double &value, const int FaceName, const double time) {
+//   bool test=1; //Dirichlet
+//   value=0.;
+//   //   cout << "Time bdc : " <<  time << endl;
+//   if (!strcmp(name,"U")) {
+//     if (1==FaceName) { //inflow
+//       test=1;
+//       //comsol Benchmark
+//       //value = (0.05*time*time)/(sqrt( (0.04 - time*time)*(0.04 - time*time) + (0.1*time)*(0.1*time) ))*y*(0.0001-y)*4.*100000000;
+//       value = 0.05*y*(0.0001-y)*4.*100000000;
+//     }
+//     else if (2==FaceName ) {  //outflow
+//       test=0;
+//       //    test=1;
+//       value=0.;
+//     }
+//     else if (3==FaceName ) {  // no-slip fluid wall
+//       test=1;
+//       value=0.;
+//     }
+//     else if (4==FaceName ) {  // no-slip solid wall
+//       test=1;
+//       value=0.;
+//     }
+//   }
+//   else if (!strcmp(name,"V")) {
+//     if (1==FaceName) {          //inflow
+//       test=1;
+//       value=0.;
+//     }
+//     else if (2==FaceName ) {    //outflow
+//       test=0;
+//       //    test=1;
+//       value=0.;
+//     }
+//     else if (3==FaceName ) {    // no-slip fluid wall
+//       test=1;
+//       value=0;
+//     }
+//     else if (4==FaceName ) {    // no-slip solid wall
+//       test=1;
+//       value=0.;
+//     }
+//   }
+//   else if (!strcmp(name,"W")) {
+//     if (1==FaceName) {
+//       test=1;
+//       value=0.;
+//     }
+//     else if (2==FaceName ) {
+//       test=1;
+//       value=0.;
+//     }
+//     else if (3==FaceName ) {
+//       test=1;
+//       value=0.;
+//     }
+//     else if (4==FaceName ) {
+//       test=1;
+//       value=0.;
+//     }
+//   }
+//   else if (!strcmp(name,"P")) {
+//     if (1==FaceName) {
+//       test=0;
+//       value=0.;
+//     }
+//     else if (2==FaceName ) {
+//       test=0;
+//       value=0.;
+//     }
+//     else if (3==FaceName ) {
+//       test=0;
+//       value=0.;
+//     }
+//     else if (4==FaceName ) {
+//       test=0;
+//       value=0.;
+//     }
+//   }
+//   else if (!strcmp(name,"DX")) {
+//     if (1==FaceName) {       //inflow
+//       test=1;
+//       value=0.;
+//     }
+//     else if (2==FaceName ) { //outflow
+//       test=1;
+//       value=0.;
+//     }
+//     else if (3==FaceName ) { // no-slip Top fluid wall
+//       test=0;
+//       value=0;
+//     }
+//     else if (4==FaceName ) { // no-slip solid wall
+//       test=1;
+//       value=0.;
+//     }
+//   }
+//   else if (!strcmp(name,"DY")) {
+//     if (1==FaceName) {       //inflow
+//       test=0;
+//       value=0.;
+//     }
+//     else if (2==FaceName ) { //outflow
+//       test=0;
+//       value=0.;
+//     }
+//     else if (3==FaceName ) { // no-slip fluid wall
+//       test=1;
+//       value=0.;
+//     }
+//     else if (4==FaceName ) { // no-slip solid wall
+//       test=1;
+//       value=0.;
+//     }
+//   }
+//   else if (!strcmp(name,"DZ")) {
+//     if (1==FaceName) {       //inflow
+//       test=1;
+//       value=0.;
+//     }
+//     else if (2==FaceName ) { //outflow
+//       test=1;
+//       value=0.;
+//     }
+//     else if (3==FaceName ) { // no-slip fluid wall
+//       test=1;
+//       value=0.;
+//     }
+//     else if (4==FaceName ) { // no-slip solid wall
+//       test=1;
+//       value=0.;
+//     }
+//   }
+//   else if (!strcmp(name,"AX")) {
+//     test=0;
+//     value=0;
+//   }
+//   else if (!strcmp(name,"AY")) {
+//     test=0;
+//     value=0;
+//   }
+//   else if (!strcmp(name,"AZ")) {
+//     test=0;
+//     value=0;
+//   }
+//   return test;
+// }
 

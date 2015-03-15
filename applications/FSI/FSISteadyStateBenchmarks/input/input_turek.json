@@ -9,6 +9,122 @@
                  }
              },
              
+    // solution
+    "multilevel_solution" : {
+      "multilevel_mesh" : {
+        "first" : {
+          "variable" : {
+            "DX" : { 
+              "fe_order" : "second",
+              "boundary_conditions" : [
+                {
+                  "facename" : "1",
+                  "bdc_type" : "dirichlet"
+                },
+                {
+                  "facename" : "2",
+                  "bdc_type" : "dirichlet"
+                },
+                {
+                  "facename" : "3",
+                  "bdc_type" : "neumann"
+                },               
+                {
+                  "facename" : "4",
+                  "bdc_type" : "dirichlet"
+                }
+                                    ]                                           
+                  },
+            "DY" : { 
+              "fe_order" : "second",
+              "boundary_conditions" : [
+                {
+                  "facename" : "1",
+                  "bdc_type" : "neumann"
+                },
+                {
+                  "facename" : "2",
+                  "bdc_type" : "neumann"
+                },
+                {
+                  "facename" : "3",
+                  "bdc_type" : "dirichlet"
+                },               
+                {
+                  "facename" : "4",
+                  "bdc_type" : "dirichlet"
+                }
+                                    ]                                           
+                  },
+            "U" : { 
+              "fe_order" : "second",
+              "boundary_conditions" : [
+                {
+                  "facename" : "1",  
+                  "bdc_type" : "dirichlet",
+                  "bdc_func" : "1.5*0.2*4.0/0.1681*y*(0.41-y)"
+                },
+                {
+                  "facename" : "2",
+                  "bdc_type" : "neumann"
+                },
+                {
+                  "facename" : "3",
+                  "bdc_type" : "dirichlet"
+                },               
+                {
+                  "facename" : "4",
+                  "bdc_type" : "dirichlet"
+                }
+                                    ]                                           
+                  },
+            "V" : { 
+              "fe_order" : "second",
+              "boundary_conditions" : [
+                {
+                  "facename" : "1",
+                  "bdc_type" : "dirichlet"
+                },
+                {
+                  "facename" : "2",
+                  "bdc_type" : "neumann"
+                },
+                {
+                  "facename" : "3",
+                  "bdc_type" : "dirichlet"
+                },               
+                {
+                  "facename" : "4",
+                  "bdc_type" : "dirichlet"
+                }
+                                    ]                                           
+                  },
+            "P" : { 
+              "fe_order" : "first",
+              "boundary_conditions" : [
+                {
+                  "facename" : "1",
+                  "bdc_type" : "neumann"
+                },
+                {
+                  "facename" : "2",
+                  "bdc_type" : "neumann"
+                },
+                {
+                  "facename" : "3",
+                  "bdc_type" : "neumann"
+                },               
+                {
+                  "facename" : "4",
+                  "bdc_type" : "neumann"
+                }
+                                    ]                                           
+                  }
+                }
+              }
+            }
+          },
+             
     // multilevel problem
     "multilevel_problem" : {
       "parameters" : {
