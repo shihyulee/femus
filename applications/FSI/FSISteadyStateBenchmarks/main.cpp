@@ -581,122 +581,122 @@ bool SetRefinementFlag(const double &x, const double &y, const double &z, const 
 //   return test;
 // }
 
-bool SetBoundaryConditionDrum(const double &x, const double &y, const double &z,const char name[], double &value, const int facename, const double time) {
-  bool test=1; //dirichlet
-  value=0.;
-  if(!strcmp(name,"U")) {
-    if(1==facename){   //top
-      test=0;
-      value=0;
-    }  
-    else if(2==facename ){  //top side
-     test=0;
-     value=0.;
-    }
-    else if(3==facename ){  //top bottom
-      test=1;
-      value=0;	
-    }
-    else if(4==facename ){  //solid side
-      test=1;
-      value=0;	
-    }
-    else if(5==facename ){  //bottom side
-      test=1;
-      value=0;	
-    }
-    else if(6==facename ){  //bottom 
-      test=0;
-      value=200000;	
-    }
-  }  
-  else if(!strcmp(name,"V")){
-     if(1==facename){   //top
-      test=0;
-      value=0;
-    }  
-    else if(2==facename ){  //top side
-     test=0;
-     value=0.;
-    }
-    else if(3==facename ){  //top bottom
-      test=1;
-      value=0;	
-    }
-    else if(4==facename ){  //solid side
-      test=1;
-      value=0;	
-    }
-    else if(5==facename ){  //bottom side
-      test=1;
-      value=0;	
-    }
-    else if(6==facename ){  //bottom 
-      test=0;
-      value=0;	
-    }
-  }
-  else if(!strcmp(name,"P")){
-    if(facename==facename){
-      test=0;
-      value=0.;
-    } 
-  }
-  else if(!strcmp(name,"DX")){
-    if(1==facename){   //top
-      test=0;
-      value=0;
-    }  
-    else if(2==facename ){  //top side
-     test=1;
-     value=0.;
-    }
-    else if(3==facename ){  //top bottom
-      test=0;
-      value=0;	
-    }
-    else if(4==facename ){  //solid side
-      test=1;
-      value=0;	
-    }
-    else if(5==facename ){  //bottom side
-      test=1;
-      value=0;	
-    }
-    else if(6==facename ){  //bottom 
-      test=0;
-      value=0;	
-    }
-  }
-  else if(!strcmp(name,"DY")){
-   if(1==facename){   //top
-      test=1;
-      value=0;
-    }  
-    else if(2==facename ){  //top side
-     test=0;
-     value=0.;
-    }
-    else if(3==facename ){  //top bottom
-      test=1;
-      value=0;	
-    }
-    else if(4==facename ){  //solid side
-      test=1;
-      value=0;	
-    }
-    else if(5==facename ){  //bottom side
-      test=1;
-      value=0;	
-    }
-    else if(6==facename ){  //bottom 
-      test=1;
-      value=0;	
-    }
-  }
-
-  return test;
-}
+// bool SetBoundaryConditionDrum(const double &x, const double &y, const double &z,const char name[], double &value, const int facename, const double time) {
+//   bool test=1; //dirichlet
+//   value=0.;
+//   if(!strcmp(name,"U")) {
+//     if(1==facename){   //top
+//       test=0;
+//       value=0;
+//     }  
+//     else if(2==facename ){  //top side
+//      test=0;
+//      value=0.;
+//     }
+//     else if(3==facename ){  //top bottom
+//       test=1;
+//       value=0;	
+//     }
+//     else if(4==facename ){  //solid side
+//       test=1;
+//       value=0;	
+//     }
+//     else if(5==facename ){  //bottom side
+//       test=1;
+//       value=0;	
+//     }
+//     else if(6==facename ){  //bottom 
+//       test=0;
+//       value=200000;	
+//     }
+//   }  
+//   else if(!strcmp(name,"V")){
+//      if(1==facename){   //top
+//       test=0;
+//       value=0;
+//     }  
+//     else if(2==facename ){  //top side
+//      test=0;
+//      value=0.;
+//     }
+//     else if(3==facename ){  //top bottom
+//       test=1;
+//       value=0;	
+//     }
+//     else if(4==facename ){  //solid side
+//       test=1;
+//       value=0;	
+//     }
+//     else if(5==facename ){  //bottom side
+//       test=1;
+//       value=0;	
+//     }
+//     else if(6==facename ){  //bottom 
+//       test=0;
+//       value=0;	
+//     }
+//   }
+//   else if(!strcmp(name,"P")){
+//     if(facename==facename){
+//       test=0;
+//       value=0.;
+//     } 
+//   }
+//   else if(!strcmp(name,"DX")){
+//     if(1==facename){   //top
+//       test=0;
+//       value=0;
+//     }  
+//     else if(2==facename ){  //top side
+//      test=1;
+//      value=0.;
+//     }
+//     else if(3==facename ){  //top bottom
+//       test=0;
+//       value=0;	
+//     }
+//     else if(4==facename ){  //solid side
+//       test=1;
+//       value=0;	
+//     }
+//     else if(5==facename ){  //bottom side
+//       test=1;
+//       value=0;	
+//     }
+//     else if(6==facename ){  //bottom 
+//       test=0;
+//       value=0;	
+//     }
+//   }
+//   else if(!strcmp(name,"DY")){
+//    if(1==facename){   //top
+//       test=1;
+//       value=0;
+//     }  
+//     else if(2==facename ){  //top side
+//      test=0;
+//      value=0.;
+//     }
+//     else if(3==facename ){  //top bottom
+//       test=1;
+//       value=0;	
+//     }
+//     else if(4==facename ){  //solid side
+//       test=1;
+//       value=0;	
+//     }
+//     else if(5==facename ){  //bottom side
+//       test=1;
+//       value=0;	
+//     }
+//     else if(6==facename ){  //bottom 
+//       test=1;
+//       value=0;	
+//     }
+//   }
+// 
+//   return test;
+// }
 
 
 

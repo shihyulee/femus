@@ -2,6 +2,7 @@
 #define __femus_include_IncompressibleFSIAssembly_hpp__
 
 #include "MonolithicFSINonLinearImplicitSystem.hpp" 
+#include "ParsedFunction.hpp"
 #include "adept.h"
 
 
@@ -95,7 +96,9 @@ namespace femus {
       Rhs[i].reserve(max_size);
     }     
     
-    
+    vector<double> xyzt(4,0.);
+    ParsedFunction* bdcfunc = NULL;
+  
     vector < int > dofsAll;
     dofsAll.reserve(max_size*(2+dim+1));
         
@@ -257,18 +260,26 @@ namespace femus {
 	
 	// Boundary integral
 	{
-	  double tau=0.;
+// 	  double tau=0.;
 	  vector<adept::adouble> normal(dim,0);
-	       
-	  // loop on faces
-/*	  for(unsigned jface=0; jface<myel->GetElementFaceNumber(kel); jface++) {
-		
+
+          // loop on faces
+	  for(unsigned jface=0; jface<myel->GetElementFaceNumber(kel); jface++) {
+	    
 	    // look for boundary faces
 	    if(myel->GetFaceElementIndex(kel,jface)<0) {
-	      unsigned int face = -(mymsh->el->GetFaceElementIndex(kel,jface)+1);	      
-	      if( !ml_sol->_SetBoundaryConditionFunction(0.,0.,0.,"U",tau,face,0.) && tau!=0.){
-		unsigned nve = mymsh->el->GetElementFaceDofNumber(kel,jface,SolType2);
-		const unsigned felt = mymsh->el->GetElementFaceType(kel, jface);  		  		  
+	      //unsigned int face = -(mymsh->el->GetFaceElementIndex(kel,jface)+1); //before
+	      unsigned int face = -(mymsh->el->GetFaceElementIndex(kel,jface)+1) -1; 
+      
+	    // loop over U-V-W variables
+	    for(unsigned idim=0; idim<dim; idim++) {
+	      
+	      const char* ivarname = &varname[3+idim][0];
+              // look for non-homogeneous neumann boundary conditions
+	      if(ml_sol->GetBoundaryCondition(ivarname,face) == NEUMANN && !ml_sol->Ishomogeneous(ivarname,face)) {
+		bdcfunc = (ParsedFunction* )(ml_sol->GetBdcFunction(ivarname, face));
+	        unsigned nve = mymsh->el->GetElementFaceDofNumber(kel,jface,SolType2);
+		const unsigned felt = mymsh->el->GetElementFaceType(kel, jface);  
 		for(unsigned i=0; i<nve; i++) {
 		  unsigned inode=mymsh->el->GetFaceVertexIndex(kel,jface,i)-1u;
 		  unsigned inode_Metis=mymsh->GetMetisDof(inode,2);
@@ -277,12 +288,23 @@ namespace femus {
 		    vx_face[idim][i]=(*mymsh->_coordinate->_Sol[idim])(inode_Metis) + Soli[indexVAR[idim]][ilocal];
 		  }
 		}
-		for(unsigned igs=0; igs < mymsh->_finiteElement[felt][SolType2]->GetGaussPointNumber(); igs++) {
+	      
+	      // loop over gauss points
+	      for(unsigned igs=0; igs < mymsh->_finiteElement[felt][SolType2]->GetGaussPointNumber(); igs++) {
 		  mymsh->_finiteElement[felt][SolType2]->JacobianSur_AD(vx_face,igs,Weight,phi,gradphi,normal);
-		  //phi1 =mymsh->_finiteElement[felt][SolType2]->GetPhi(igs);
+		  
+		  xyzt.assign(4,0.);
+		  for(unsigned i=0; i<nve; i++) {
+		    for(unsigned ivar=0; ivar<dim; ivar++) {
+		      // I lose the 'newton' derivative evaluation on the function evalution
+		      xyzt[ivar] += vx_face[ivar][i].value()*phi[i]; 
+		    }
+		  }
+		  
 		  // *** phi_i loop ***
 		  for(unsigned i=0; i<nve; i++) {
-		    adept::adouble value = - phi[i]*tau/rhof*Weight;
+		    double surfterm_g = (*bdcfunc)(&xyzt[0]);
+		    adept::adouble value = - phi[i]*surfterm_g/rhof*Weight;
 		    unsigned int ilocal = mymsh->el->GetLocalFaceVertexIndex(kel, jface, i);
 		    
 		    for(unsigned idim=0; idim<dim; idim++) {
@@ -292,12 +314,44 @@ namespace femus {
 		      else { //if interface node it goes to solid
 			aRhs[indexVAR[idim]][ilocal]   += value*normal[idim];
 		      }
-		    }	    
+		    }
 		  }
 		}
+
 	      }
 	    }
-	  } */   
+// 	      if( !ml_sol->_SetBoundaryConditionFunction(0.,0.,0.,"U",tau,face,0.) && tau!=0.){
+// 		unsigned nve = mymsh->el->GetElementFaceDofNumber(kel,jface,SolType2);
+// 		const unsigned felt = mymsh->el->GetElementFaceType(kel, jface);  		  		  
+// 		for(unsigned i=0; i<nve; i++) {
+// 		  unsigned inode=mymsh->el->GetFaceVertexIndex(kel,jface,i)-1u;
+// 		  unsigned inode_Metis=mymsh->GetMetisDof(inode,2);
+// 		  unsigned int ilocal = mymsh->el->GetLocalFaceVertexIndex(kel, jface, i);
+// 		  for(unsigned idim=0; idim<dim; idim++) {
+// 		    vx_face[idim][i]=(*mymsh->_coordinate->_Sol[idim])(inode_Metis) + Soli[indexVAR[idim]][ilocal];
+// 		  }
+// 		}
+// 		for(unsigned igs=0; igs < mymsh->_finiteElement[felt][SolType2]->GetGaussPointNumber(); igs++) {
+// 		  mymsh->_finiteElement[felt][SolType2]->JacobianSur_AD(vx_face,igs,Weight,phi,gradphi,normal);
+// 		  //phi1 =mymsh->_finiteElement[felt][SolType2]->GetPhi(igs);
+// 		  // *** phi_i loop ***
+// 		  for(unsigned i=0; i<nve; i++) {
+// 		    adept::adouble value = - phi[i]*tau/rhof*Weight;
+// 		    unsigned int ilocal = mymsh->el->GetLocalFaceVertexIndex(kel, jface, i);
+// 		    
+// 		    for(unsigned idim=0; idim<dim; idim++) {
+// 		      if((!solidmark[ilocal])){
+// 			aRhs[indexVAR[dim+idim]][ilocal]   += value*normal[idim];
+// 		      }
+// 		      else { //if interface node it goes to solid
+// 			aRhs[indexVAR[idim]][ilocal]   += value*normal[idim];
+// 		      }
+// 		    }	    
+// 		  }
+// 		}
+// 	      }
+	    }
+	  }   
 	}
 	  	  
 	// *** Gauss point loop ***
