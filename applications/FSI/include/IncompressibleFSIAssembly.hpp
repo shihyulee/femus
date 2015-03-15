@@ -261,7 +261,7 @@ namespace femus {
 	  vector<adept::adouble> normal(dim,0);
 	       
 	  // loop on faces
-	  for(unsigned jface=0; jface<myel->GetElementFaceNumber(kel); jface++) {
+/*	  for(unsigned jface=0; jface<myel->GetElementFaceNumber(kel); jface++) {
 		
 	    // look for boundary faces
 	    if(myel->GetFaceElementIndex(kel,jface)<0) {
@@ -297,7 +297,7 @@ namespace femus {
 		}
 	      }
 	    }
-	  }    
+	  } */   
 	}
 	  	  
 	// *** Gauss point loop ***

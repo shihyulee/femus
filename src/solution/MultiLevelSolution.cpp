@@ -323,6 +323,10 @@ void MultiLevelSolution::SetBoundaryCondition_new(const std::string name, const 
   _boundaryconditions[ivar][iface]       = bdctype;
   _ishomogeneous[ivar][iface]            = ishomogeneous;
   _nonhomogeneousbcfunction[ivar][iface] = func;
+  
+  double xyzt[4] = {0.,0.00005,0.,0.};
+  double a = (*func)(xyzt);
+  double b = 1.;
    
 }
 
@@ -384,7 +388,7 @@ void MultiLevelSolution::GenerateBdc_new(const unsigned k, const unsigned grid0,
 		     unsigned inode_Metis=_ml_msh->GetLevel(igridn)->GetMetisDof(inode,_SolType[k]);
 		    _solution[igridn]->_Bdc[k]->set(inode_Metis,0.);   
 		    if(!Ishomogeneous(k,face)) {
-		      ParsedFunction* bdcfunc = (ParsedFunction*)(GetBdcFunction(k,face));
+		      FunctionBase* bdcfunc = GetBdcFunction(k,face);
 		      double xyzt[4];
 		      xyzt[0] = xx;
 		      xyzt[1] = yy;

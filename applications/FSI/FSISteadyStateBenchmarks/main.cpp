@@ -201,27 +201,78 @@ int main(int argc, char *argv[]) {
 //   //Initialize (update Init(...) function)
 //   ml_sol.Initialize("All");
 
-  //Set Boundary (update Dirichlet(...) function)
-  if(1==simulation || 2==simulation)
-    ml_sol.AttachSetBoundaryConditionFunction(SetBoundaryConditionTurek);
-  else if( 3==simulation)
-    ml_sol.AttachSetBoundaryConditionFunction(SetBoundaryConditionDrum);
-  else if (4==simulation || 6==simulation)
-    ml_sol.AttachSetBoundaryConditionFunction(SetBoundaryConditionBatheCylinder);
-  else if (5==simulation)
-    ml_sol.AttachSetBoundaryConditionFunction(SetBoundaryConditionBatheShell);
-  else if (7 == simulation)
-    ml_sol.AttachSetBoundaryConditionFunction(SetBoundaryConditionComsol);
+   //Set Boundary (update Dirichlet(...) function)
+   // New method
+   //Set Boundary (update Dirichlet(...) function)
+   ml_sol.InitializeBdc();
+   
+   // These information must be retrieved from MultiLevelSolution
+   int numvar = 5;
+   std::string varname[7] = {"DX","DY","U","V","P","NULL","NULL"};
+   
+   if (dimension == 3) {
+     numvar = 7;
+     varname[0] = "DX";  varname[0] = "DY";  varname[0] = "DZ";  varname[0] = "U";  varname[0] = "V";  varname[0] = "W"; varname[0] = "P"; 
+   }
+   
+   // We have to fill these vectors from the json input file
+   std::vector<std::string> facenamearray;
+   std::vector<ParsedFunction> parsedfunctionarray;
+   std::vector<BDCType> bdctypearray;
 
-  ml_sol.GenerateBdc("DX","Steady");
-  ml_sol.GenerateBdc("DY","Steady");
-  if (dimension == 3) 
-    ml_sol.GenerateBdc("DZ","Steady");
-  ml_sol.GenerateBdc("U","Steady");
-  ml_sol.GenerateBdc("V","Steady");
-  if (dimension == 3) 
-    ml_sol.GenerateBdc("W","Steady");
-  ml_sol.GenerateBdc("P","Steady");
+   // These information must be retrieved from multilevel_mesh
+   unsigned int bdcsize = 0;
+   
+   // loop over the variables
+   for(int ivar=0; ivar<numvar; ivar++) {
+     std::stringstream ss;
+     ss << "multilevel_solution.multilevel_mesh.first.variable." << varname[ivar] << ".boundary_conditions";
+     bdcsize = inputparser->getSize(ss.str());
+     for(unsigned int index=0; index<bdcsize; ++index) {
+       //facename
+       std::string facename = inputparser->getValueFromArray(ss.str(), index, "facename", "top");
+       facenamearray.push_back(facename);
+ 
+       //bdctype
+       BDCType bdctype = inputparser->getValueFromArray(ss.str(), index, "bdc_type", DIRICHLET);
+       bdctypearray.push_back(bdctype);
+   
+       //function
+       std::string bdcfuncstr = inputparser->getValueFromArray(ss.str(), index, "bdc_func", "0.");
+       ParsedFunction pfunc(bdcfuncstr, "x,y,z,t");
+       parsedfunctionarray.push_back(pfunc);
+    }
+  }
+   
+   for(int ivar=0; ivar<numvar; ivar++) {
+     for(unsigned int index2=0; index2<bdcsize; ++index2) {   
+       ml_sol.SetBoundaryCondition_new(varname[ivar],facenamearray[index2+ivar*bdcsize],bdctypearray[index2+ivar*bdcsize],false,&parsedfunctionarray[index2+ivar*bdcsize]);
+     }
+   }
+    
+   ml_sol.GenerateBdc("All");
+   
+   
+//   if(1==simulation || 2==simulation)
+//     ml_sol.AttachSetBoundaryConditionFunction(SetBoundaryConditionTurek);
+//   else if( 3==simulation)
+//     ml_sol.AttachSetBoundaryConditionFunction(SetBoundaryConditionDrum);
+//   else if (4==simulation || 6==simulation)
+//     ml_sol.AttachSetBoundaryConditionFunction(SetBoundaryConditionBatheCylinder);
+//   else if (5==simulation)
+//     ml_sol.AttachSetBoundaryConditionFunction(SetBoundaryConditionBatheShell);
+//   else if (7 == simulation)
+//     ml_sol.AttachSetBoundaryConditionFunction(SetBoundaryConditionComsol);
+// 
+//   ml_sol.GenerateBdc("DX","Steady");
+//   ml_sol.GenerateBdc("DY","Steady");
+//   if (dimension == 3) 
+//     ml_sol.GenerateBdc("DZ","Steady");
+//   ml_sol.GenerateBdc("U","Steady");
+//   ml_sol.GenerateBdc("V","Steady");
+//   if (dimension == 3) 
+//     ml_sol.GenerateBdc("W","Steady");
+//   ml_sol.GenerateBdc("P","Steady");
   
   MultiLevelProblem ml_prob(&ml_sol);
   

@@ -20,7 +20,10 @@
 //C++ include
 #include "cstdio"
 #include "fstream"
+#include <string> 
+#include <sstream>    
 
+using namespace std;
 
 namespace femus {
   
@@ -236,7 +239,11 @@ void GambitIO::read(const std::string& name, vector < vector < double> > &coords
     int value;
     unsigned nface;
     inf >>value>>str2>>nface>>str2>>str2;
+    std::stringstream ss;
+    ss << value;
+    std::string facename = ss.str();
     value=-value-1;
+    mesh._boundaryinfo.insert( std::pair<unsigned int, std::string>(k,facename));
     for (unsigned i=0; i<nface; i++) {
       unsigned iel,iface;
       inf>>iel>>str2>>iface;
