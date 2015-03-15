@@ -4,10 +4,85 @@
     "multilevel_mesh" : {
       "first" : {
         "type" : {
-          "filename" : "input/beam.neu"
+          "filename" : "input/beam2.neu"
                   }
                  }
              },
+             
+    // solution
+    "multilevel_solution" : {
+      "multilevel_mesh" : {
+        "first" : {
+          "variable" : {
+            "DX" : { 
+              "fe_order" : "second",
+              "boundary_conditions" : [
+                {
+                  "facename" : "1",
+                  "bdc_type" : "dirichlet"
+                },
+                {
+                  "facename" : "2",
+                  "bdc_type" : "neumann"
+                }
+                                    ]                                           
+                  },
+            "DY" : { 
+              "fe_order" : "second",
+              "boundary_conditions" : [
+                {
+                  "facename" : "1",
+                  "bdc_type" : "dirichlet"
+                },
+                {
+                  "facename" : "2",
+                  "bdc_type" : "neumann"
+                }
+                                    ]                                           
+                  },
+            "U" : { 
+              "fe_order" : "second",
+              "boundary_conditions" : [
+                {
+                  "facename" : "1",
+                  "bdc_type" : "dirichlet"
+                },
+                {
+                  "facename" : "2",
+                  "bdc_type" : "neumann"
+                }
+                                    ]                                           
+                  },
+            "V" : { 
+              "fe_order" : "second",
+              "boundary_conditions" : [
+                {
+                  "facename" : "1",
+                  "bdc_type" : "dirichlet"
+                },
+                {
+                  "facename" : "2",
+                  "bdc_type" : "neumann"
+                }
+                                    ]                                           
+                  },
+            "P" : { 
+              "fe_order" : "first",
+              "boundary_conditions" : [
+                {
+                  "facename" : "1",
+                  "bdc_type" : "neumann"
+                },
+                {
+                  "facename" : "2",
+                  "bdc_type" : "neumann"
+                }
+                                    ]                                           
+                  }
+                }
+              }
+            }
+          },
              
     // multilevel problem
     "multilevel_problem" : {
