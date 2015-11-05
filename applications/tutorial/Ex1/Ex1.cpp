@@ -63,6 +63,14 @@ int main(int argc, char** args) {
   mlSol.Initialize("P", InitalValueP);
   mlSol.Initialize("T", InitalValueT);    // note that this initialization is the same as piecewise constant element
 
+  
+  
+  
+  
+  
+  
+  
+  
   // print solutions
   std::vector < std::string > variablesToBePrinted;
   variablesToBePrinted.push_back("U");

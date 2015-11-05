@@ -15,6 +15,7 @@
 #include "MultiLevelProblem.hpp"
 #include "VTKWriter.hpp"
 #include "GMVWriter.hpp"
+#include "LinearImplicitSystem.hpp"
 
 using namespace femus;
 
@@ -52,22 +53,52 @@ int main(int argc, char** args) {
 
   // add variables to mlSol
   mlSol.AddSolution("U", LAGRANGE, FIRST);
-  mlSol.AddSolution("V", LAGRANGE, SERENDIPITY);
-  mlSol.AddSolution("W", LAGRANGE, SECOND);
-  mlSol.AddSolution("P", DISCONTINOUS_POLYNOMIAL, ZERO);
-  mlSol.AddSolution("T", DISCONTINOUS_POLYNOMIAL, FIRST);
+  //mlSol.AddSolution("V", LAGRANGE, SERENDIPITY);
+  //mlSol.AddSolution("W", LAGRANGE, SECOND);
+  //mlSol.AddSolution("P", DISCONTINOUS_POLYNOMIAL, ZERO);
+  //mlSol.AddSolution("T", DISCONTINOUS_POLYNOMIAL, FIRST);
 
   mlSol.Initialize("All");    // initialize all varaibles to zero
 
-  mlSol.Initialize("U", InitalValueU);
-  mlSol.Initialize("P", InitalValueP);
-  mlSol.Initialize("T", InitalValueT);    // note that this initialization is the same as piecewise constant element
+  //mlSol.Initialize("U", InitalValueU);
+  //mlSol.Initialize("P", InitalValueP);
+  //mlSol.Initialize("T", InitalValueT);    // note that this initialization is the same as piecewise constant element
 
+      // attach the boundary condition function and generate boundary data
+      mlSol.AttachSetBoundaryConditionFunction(SetBoundaryCondition);
+      mlSol.GenerateBdc("u");
+
+      // define the multilevel problem attach the mlSol object to it
+      MultiLevelProblem mlProb(&mlSol);
+
+      // add system Poisson in mlProb as a Linear Implicit System
+      LinearImplicitSystem& system = mlProb.add_system < LinearImplicitSystem > ("Poisson");
+
+      // add solution "u" to system
+      system.AddSolutionToSystemPDE("u");
+
+      // attach the assembling function to system
+      system.SetAssembleFunction(AssemblePoissonProblem_AD);
+
+      // initilaize and solve the system
+      system.init();
+      system.solve();
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   // print solutions
   std::vector < std::string > variablesToBePrinted;
   variablesToBePrinted.push_back("U");
-  variablesToBePrinted.push_back("P");
-  variablesToBePrinted.push_back("T");
+  //variablesToBePrinted.push_back("P");
+  //variablesToBePrinted.push_back("T");
 
   VTKWriter vtkIO(&mlSol);
   vtkIO.write(DEFAULT_OUTPUTDIR, "biquadratic", variablesToBePrinted);
