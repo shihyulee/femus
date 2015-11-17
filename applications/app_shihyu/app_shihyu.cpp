@@ -24,8 +24,8 @@ bool SetBoundaryCondition(const std::vector < double >& x, const char solName[],
   bool dirichlet = true; //dirichlet
   value = 0;
 
-  if (faceName == 2)
-    dirichlet = false;
+//  if (faceName == 2)
+//    dirichlet = false;
 
   return dirichlet;
 }
@@ -57,11 +57,16 @@ int main(int argc, char** args) {
   // define multilevel mesh
   MultiLevelMesh mlMsh;
   double scalingFactor = 1.;
+  
+      mlMsh.GenerateCoarseBoxMesh( 8, 8, 0, -0.5, 0.5, -0.5, 0.5, 0, 0., QUAD9, "seventh");
+  
+  
+  
   // read coarse level mesh and generate finers level meshes
-  mlMsh.ReadCoarseMesh("./input/square.neu", "seventh", scalingFactor);
+  //mlMsh.ReadCoarseMesh("./input/square.neu", "seventh", scalingFactor);
   /* "seventh" is the order of accuracy that is used in the gauss integration scheme
       probably in the furure it is not going to be an argument of this function   */
-  unsigned numberOfUniformLevels = 3;
+  unsigned numberOfUniformLevels = 1;
   unsigned numberOfSelectiveLevels = 0;
   mlMsh.RefineMesh(numberOfUniformLevels , numberOfUniformLevels + numberOfSelectiveLevels, NULL);
   mlMsh.PrintInfo();
