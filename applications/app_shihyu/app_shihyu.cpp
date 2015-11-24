@@ -58,7 +58,7 @@ int main(int argc, char** args) {
   MultiLevelMesh mlMsh;
   double scalingFactor = 1.;
   
-      mlMsh.GenerateCoarseBoxMesh( 2, 2, 0, -0.5, 0.5, -0.5, 0.5, 0, 0., QUAD9, "seventh");
+      mlMsh.GenerateCoarseBoxMesh( 2, 2, 0, -0.5, 0.5, -0.5, 0.5, 0., 0., QUAD9, "seventh");
   
   
   
@@ -75,7 +75,7 @@ int main(int argc, char** args) {
   MultiLevelSolution mlSol(&mlMsh);
 
   // add variables to mlSol
-  mlSol.AddSolution("U", LAGRANGE, SERENDIPITY);
+  mlSol.AddSolution("U", LAGRANGE, SECOND);
   //mlSol.AddSolution("V", LAGRANGE, SERENDIPITY);
   //mlSol.AddSolution("W", LAGRANGE, SECOND);
   //mlSol.AddSolution("P", DISCONTINOUS_POLYNOMIAL, ZERO);
