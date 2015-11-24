@@ -23,9 +23,9 @@ using namespace femus;
 bool SetBoundaryCondition(const std::vector < double >& x, const char solName[], double& value, const int faceName, const double time) {
   bool dirichlet = true; //dirichlet
   value = 0;
-
-//  if (faceName == 2)
-//    dirichlet = false;
+/*
+  if (faceName == 2)
+    dirichlet = false;*/
 
   return dirichlet;
 }
@@ -37,64 +37,45 @@ double GetExactSolutionLaplace(const std::vector < double >& x) {
 
 void AssemblePoissonProblem(MultiLevelProblem& ml_prob);
 
-//double InitalValueU(const std::vector < double >& x) {
-//  return x[0] + x[1];
-//}
-
-//double InitalValueP(const std::vector < double >& x) {
-//  return x[0];
-//}
-
-//double InitalValueT(const std::vector < double >& x) {
-//  return x[1];
-//}
 
 int main(int argc, char** args) {
 
-  // init Petsc-MPI communicator
+ //************* INITIALIZATION BEGIN **************************************************************************  
+ // init Petsc-MPI communicator
   FemusInit mpinit(argc, args, MPI_COMM_WORLD);
+ //************* INITIALIZATION END **************************************************************************  
 
+//************* MESH BEGIN **************************************************************************  
   // define multilevel mesh
   MultiLevelMesh mlMsh;
   double scalingFactor = 1.;
-  
-      mlMsh.GenerateCoarseBoxMesh( 2, 2, 0, -0.5, 0.5, -0.5, 0.5, 0., 0., QUAD9, "seventh");
-  
-  
-  
   // read coarse level mesh and generate finers level meshes
-  //mlMsh.ReadCoarseMesh("./input/square.neu", "seventh", scalingFactor);
+//   .ReadCoarseMesh("./input/square.neu", "seventh", scalingFactor);
+  mlMsh.GenerateCoarseBoxMesh(2,2,0,-0.5,0.5,-0.5,0.5,0.,0.,QUAD9,"seventh");
+  
   /* "seventh" is the order of accuracy that is used in the gauss integration scheme
       probably in the furure it is not going to be an argument of this function   */
   unsigned numberOfUniformLevels = 1;
   unsigned numberOfSelectiveLevels = 0;
   mlMsh.RefineMesh(numberOfUniformLevels , numberOfUniformLevels + numberOfSelectiveLevels, NULL);
   mlMsh.PrintInfo();
+//************* MESH END **************************************************************************  
 
+//************* SOLUTION BEGIN **************************************************************************  
   // define the multilevel solution and attach the mlMsh object to it
   MultiLevelSolution mlSol(&mlMsh);
 
   // add variables to mlSol
   mlSol.AddSolution("U", LAGRANGE, SECOND);
-  //mlSol.AddSolution("V", LAGRANGE, SERENDIPITY);
-  //mlSol.AddSolution("W", LAGRANGE, SECOND);
-  //mlSol.AddSolution("P", DISCONTINOUS_POLYNOMIAL, ZERO);
-  //mlSol.AddSolution("T", DISCONTINOUS_POLYNOMIAL, FIRST);
 
   mlSol.Initialize("All");    // initialize all varaibles to zero
 
-  //mlSol.Initialize("U", InitalValueU);
-  //mlSol.Initialize("P", InitalValueP);
-  //mlSol.Initialize("T", InitalValueT);    // note that this initialization is the same as piecewise constant element
-
-      // attach the boundary condition function and generate boundary data
+       // attach the boundary condition function and generate boundary data
       mlSol.AttachSetBoundaryConditionFunction(SetBoundaryCondition);
       mlSol.GenerateBdc("U");
-      
+//************* SOLUTION END **************************************************************************  
 
-//***************Problem Begin*********************************************************************************************
-      
-      
+//************* PROBLEM BEGIN **************************************************************************  
       // define the multilevel problem attach the mlSol object to it
       MultiLevelProblem mlProb(&mlSol);
 
@@ -110,22 +91,13 @@ int main(int argc, char** args) {
       // initilaize and solve the system
       system.init();
       system.solve();
+//************* PROBLEM END **************************************************************************  
+ 
   
-  
-//***************Problem End**********************************************************************************************
-  
-  
-  
-  
-  
-  
-  
-  
+//************* PRINT BEGIN **************************************************************************  
   // print solutions
   std::vector < std::string > variablesToBePrinted;
   variablesToBePrinted.push_back("U");
-  //variablesToBePrinted.push_back("P");
-  //variablesToBePrinted.push_back("T");
 
   VTKWriter vtkIO(&mlSol);
   vtkIO.write(DEFAULT_OUTPUTDIR, "biquadratic", variablesToBePrinted);
@@ -134,10 +106,10 @@ int main(int argc, char** args) {
   variablesToBePrinted.push_back("all");
   gmvIO.SetDebugOutput(false);
   gmvIO.write(DEFAULT_OUTPUTDIR, "biquadratic", variablesToBePrinted);
+//************* PRINT END **************************************************************************  
 
   return 0;
 }
-
 
 
 void AssemblePoissonProblem(MultiLevelProblem& ml_prob) {
@@ -170,7 +142,16 @@ void AssemblePoissonProblem(MultiLevelProblem& ml_prob) {
 
   unsigned    iproc = msh->processor_id(); // get the process_id (for parallel computation)
 
-  //solution variable
+// =========== GEOMETRY ===============    
+  vector < vector < double > > x(dim);    // local coordinates
+  unsigned xType = 2; // get the finite element type for "x", it is always 2 (LAGRANGE QUADRATIC)
+
+  for (unsigned i = 0; i < dim; i++) {
+    x[i].reserve(maxSize);
+  }
+// =========== GEOMETRY ===============    
+
+// =========== SOLUTION ===============    
   unsigned soluIndex;
   soluIndex = mlSol->GetIndex("U");    // get the position of "U" in the ml_sol object
   unsigned soluType = mlSol->GetSolutionType(soluIndex);    // get the finite element type for "U"
@@ -180,66 +161,49 @@ void AssemblePoissonProblem(MultiLevelProblem& ml_prob) {
 
   vector < double >  solu; // local solution
   solu.reserve(maxSize);
+  
+  vector< int > l2GMap; // local to global mapping
+  l2GMap.reserve(maxSize);
 
-  vector < vector < double > > x(dim);    // local coordinates
-  unsigned xType = 2; // get the finite element type for "x", it is always 2 (LAGRANGE QUADRATIC)
-
-  for (unsigned i = 0; i < dim; i++) {
-    x[i].reserve(maxSize);
-  }
 
   vector <double> phi;  // local test function
   vector <double> phi_x; // local test function first order partial derivatives
   vector <double> phi_xx; // local test function second order partial derivatives
-  double weight; // gauss point weight
-
   phi.reserve(maxSize);
   phi_x.reserve(maxSize * dim);
   phi_xx.reserve(maxSize * dim2);
+// =========== SOLUTION ===============    
+
+
+// =========== EQUATION ===============    
+  double weight; // gauss point weight
 
   vector< double > Res; // local redidual vector
   Res.reserve(maxSize);
 
-  vector< int > l2GMap; // local to global mapping
-  l2GMap.reserve(maxSize);
   vector < double > Jac;
   Jac.reserve(maxSize * maxSize);
+  
+  if (assembleMatrix) { KK->zero(); }// Set to zero all the entries of the Global Matrix
+   RES->zero();
+  // =========== EQUATION ===============    
 
-  if (assembleMatrix)
-    KK->zero(); // Set to zero all the entries of the Global Matrix
-int counter = 0;
   // element loop: each process loops only on the elements that owns
   for (int iel = msh->IS_Mts2Gmt_elem_offset[iproc]; iel < msh->IS_Mts2Gmt_elem_offset[iproc + 1]; iel++) {
 
     unsigned kel = msh->IS_Mts2Gmt_elem[iel]; // mapping between paralell dof and mesh dof
+
+// =========== GEOMETRY ===============    
     short unsigned kelGeom = el->GetElementType(kel);    // element geometry type
-    unsigned nDofu  = el->GetElementDofNumber(kel, soluType);    // number of solution element dofs
     unsigned nDofx = el->GetElementDofNumber(kel, xType);    // number of coordinate element dofs
-
-    // resize local arrays
-    l2GMap.resize(nDofu);
-    solu.resize(nDofu);
-
+    
+    //resize
     for (int i = 0; i < dim; i++) {
       x[i].resize(nDofx);
     }
-
-    Res.resize(nDofu);    //resize
-    std::fill(Res.begin(), Res.end(), 0);    //set Res to zero
-
-    Jac.resize(nDofu * nDofu);    //resize
-    std::fill(Jac.begin(), Jac.end(), 0);    //set Jac to zero
-
-    // local storage of global mapping and solution
-    for (unsigned i = 0; i < nDofu; i++) {
-      unsigned iNode = el->GetMeshDof(kel, i, soluType);    // local to global solution node
-      unsigned solDof = msh->GetMetisDof(iNode, soluType);    // global to global mapping between solution node and solution dof
-      solu[i] = (*sol->_Sol[soluIndex])(solDof);      // global extraction and local storage for the solution
-      l2GMap[i] = pdeSys->GetKKDof(soluIndex, soluPdeIndex, iNode);    // global to global mapping between solution node and pdeSys dof
-    }
-
-    // local storage of coordinates
-    for (unsigned i = 0; i < nDofx; i++) {
+   
+    //fill
+   for (unsigned i = 0; i < nDofx; i++) {
       unsigned iNode = el->GetMeshDof(kel, i, xType);    // local to global coordinates node
       unsigned xDof  = msh->GetMetisDof(iNode, xType);    // global to global mapping between coordinates node and coordinate dof
 
@@ -247,6 +211,37 @@ int counter = 0;
         x[jdim][i] = (*msh->_coordinate->_Sol[jdim])(xDof);      // global extraction and local storage for the element coordinates
       }
     }
+// =========== GEOMETRY ===============    
+   
+   
+    
+// =========== SOLUTION ===============    
+    unsigned nDofu  = el->GetElementDofNumber(kel, soluType);    // number of solution element dofs
+
+    //resize
+    l2GMap.resize(nDofu);
+    solu.resize(nDofu);
+    
+    //fill
+   for (unsigned i = 0; i < nDofu; i++) {
+      unsigned iNode = el->GetMeshDof(kel, i, soluType);    // local to global solution node
+      unsigned solDof = msh->GetMetisDof(iNode, soluType);    // global to global mapping between solution node and solution dof
+      solu[i] = (*sol->_Sol[soluIndex])(solDof);      // global extraction and local storage for the solution
+      l2GMap[i] = pdeSys->GetKKDof(soluIndex, soluPdeIndex, iNode);    // global to global mapping between solution node and pdeSys dof
+    }
+ // =========== SOLUTION ===============    
+
+
+ // =========== EQUATION ===============    
+    Res.resize(nDofu);    //resize
+    std::fill(Res.begin(), Res.end(), 0.);    //set Res to zero
+
+    Jac.resize(nDofu * nDofu);    //resize
+    std::fill(Jac.begin(), Jac.end(), 0.);    //set Jac to zero
+ // =========== EQUATION ===============    
+    
+   
+
 
     if (level == levelMax || !el->GetRefinedElementIndex(kel)) {      // do not care about this if now (it is used for the AMR)
 
@@ -289,7 +284,7 @@ int counter = 0;
               for (unsigned kdim = 0; kdim < dim; kdim++) {
                 laplace += (phi_x[i * dim + kdim] * phi_x[j * dim + kdim]) * weight;
               }
-counter ++;
+
               Jac[i * nDofu + j] += laplace;
             } // end phi_j loop
           } // endif assemble_matrix
@@ -298,8 +293,6 @@ counter ++;
       } // end gauss point loop
     } // endif single element not refined or fine grid loop
 
-  
-    
     //--------------------------------------------------------------------------------------------------------
     // Add the local Matrix/Vector into the global Matrix/Vector
 
@@ -313,7 +306,7 @@ counter ++;
   } //end element loop for each process
 
   RES->close();
-   std::cout <<"----------------------" << counter << std::endl;
+
   if (assembleMatrix) KK->close();
 
   // ***************** END ASSEMBLY *******************
