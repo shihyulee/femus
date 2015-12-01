@@ -23,7 +23,7 @@ using namespace femus;
 
 bool SetBoundaryCondition(const std::vector < double >& x, const char solName[], double& value, const int faceName, const double time) {
   bool dirichlet = true; //dirichlet
-  value = 0;
+  value = 7.*x[0];
 /*
   if (faceName == 2)
     dirichlet = false;*/
@@ -35,6 +35,10 @@ double GetExactSolutionLaplace(const std::vector < double >& x) {
   double pi = acos(-1.);
   return -pi * pi * cos(pi * x[0]) * cos(pi * x[1]) - pi * pi * cos(pi * x[0]) * cos(pi * x[1]);
 };
+
+double InitalValueU(const std::vector < double >& x) {
+  return 7.*x[0];
+}
 
 void AssemblePoissonProblem(MultiLevelProblem& ml_prob);
 
@@ -58,7 +62,7 @@ int main(int argc, char** args) {
   double scalingFactor = 1.;
   // read coarse level mesh and generate finers level meshes
 //   .ReadCoarseMesh("./input/square.neu", "seventh", scalingFactor);
-  mlMsh.GenerateCoarseBoxMesh(2,2,0,-0.5,0.5,-0.5,0.5,0.,0.,QUAD9,"seventh");
+  mlMsh.GenerateCoarseBoxMesh(32,32,0,-0.5,0.5,-0.5,0.5,0.,0.,QUAD9,"seventh");
   
   /* "seventh" is the order of accuracy that is used in the gauss integration scheme
       probably in the furure it is not going to be an argument of this function   */
@@ -75,7 +79,7 @@ int main(int argc, char** args) {
   // add variables to mlSol
   mlSol.AddSolution("U", LAGRANGE, SECOND);
 
-  mlSol.Initialize("All");    // initialize all varaibles to zero
+  mlSol.Initialize("U", InitalValueU);    // initialize all varaibles to zero
 
        // attach the boundary condition function and generate boundary data
       mlSol.AttachSetBoundaryConditionFunction(SetBoundaryCondition);
