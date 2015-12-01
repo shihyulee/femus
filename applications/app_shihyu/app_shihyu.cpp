@@ -17,6 +17,7 @@
 #include "GMVWriter.hpp"
 #include "LinearImplicitSystem.hpp"
 #include "NumericVector.hpp"
+#include "Files.hpp"
 
 using namespace femus;
 
@@ -45,6 +46,12 @@ int main(int argc, char** args) {
   FemusInit mpinit(argc, args, MPI_COMM_WORLD);
  //************* INITIALIZATION END **************************************************************************  
 
+   // ======= Files ========================
+  Files files; 
+        files.CheckIODirectories();
+        files.RedirectCout();
+  
+  
 //************* MESH BEGIN **************************************************************************  
   // define multilevel mesh
   MultiLevelMesh mlMsh;
@@ -100,12 +107,12 @@ int main(int argc, char** args) {
   variablesToBePrinted.push_back("U");
 
   VTKWriter vtkIO(&mlSol);
-  vtkIO.write(DEFAULT_OUTPUTDIR, "biquadratic", variablesToBePrinted);
+  vtkIO.write(/*DEFAULT_OUTPUTDIR*/ files.GetOutputPath(), "biquadratic", variablesToBePrinted);
 
-  GMVWriter gmvIO(&mlSol);
-  variablesToBePrinted.push_back("all");
-  gmvIO.SetDebugOutput(false);
-  gmvIO.write(DEFAULT_OUTPUTDIR, "biquadratic", variablesToBePrinted);
+  //GMVWriter gmvIO(&mlSol);
+  //variablesToBePrinted.push_back("all");
+  //gmvIO.SetDebugOutput(false);
+  //gmvIO.write(/*DEFAULT_OUTPUTDIR*/ files.GetOutputPath(), "biquadratic", variablesToBePrinted);
 //************* PRINT END **************************************************************************  
 
   return 0;
@@ -252,14 +259,12 @@ void AssemblePoissonProblem(MultiLevelProblem& ml_prob) {
 
         // evaluate the solution, the solution derivatives and the coordinates in the gauss point
         double solu_gss = 0;
-        vector < double > gradSolu_gss(dim, 0.);
         vector < double > x_gss(dim, 0.);
 
         for (unsigned i = 0; i < nDofu; i++) {
           solu_gss += phi[i] * solu[i];
 
           for (unsigned jdim = 0; jdim < dim; jdim++) {
-            gradSolu_gss[jdim] += phi_x[i * dim + jdim] * solu[i];
             x_gss[jdim] += x[jdim][i] * phi[i];
           }
         }
@@ -267,25 +272,23 @@ void AssemblePoissonProblem(MultiLevelProblem& ml_prob) {
         // *** phi_i loop ***
         for (unsigned i = 0; i < nDofu; i++) {
 
-          double laplace = 0.;
+          double laplace_mat = 0.;
 
-          for (unsigned jdim = 0; jdim < dim; jdim++) {
-            laplace   +=  phi_x[i * dim + jdim] * gradSolu_gss[jdim];
-          }
+         
 
           double srcTerm = - GetExactSolutionLaplace(x_gss);
-          Res[i] += (srcTerm * phi[i] - laplace) * weight;
+          Res[i] += (3.*srcTerm * phi[i]) * weight;
 
           if (assembleMatrix) {
             // *** phi_j loop ***
             for (unsigned j = 0; j < nDofu; j++) {
-              laplace = 0.;
+              laplace_mat = 0.;
 
               for (unsigned kdim = 0; kdim < dim; kdim++) {
-                laplace += (phi_x[i * dim + kdim] * phi_x[j * dim + kdim]) * weight;
+                laplace_mat += (phi_x[i * dim + kdim] * phi_x[j * dim + kdim]) * weight;
               }
 
-              Jac[i * nDofu + j] += laplace;
+              Jac[i * nDofu + j] += laplace_mat;
             } // end phi_j loop
           } // endif assemble_matrix
 
